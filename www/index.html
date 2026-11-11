@@ -11,9 +11,10 @@
   <meta name="apple-mobile-web-app-title" content="Mis Finanzas">
   <title>Mis Finanzas</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
+    /* Tipografías incluidas en la app: funciona sin internet */
+    @font-face{font-family:'DM Sans';font-style:normal;font-weight:100 1000;font-display:swap;src:url(fonts/dm-sans-latin-wght-normal.woff2) format('woff2')}
+    @font-face{font-family:'Geist Mono';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/geist-mono-latin-wght-normal.woff2) format('woff2')}
     :root {
       color-scheme: dark;
       --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#242424;
@@ -1305,7 +1306,8 @@ applyMode();
 if(currentModeKey !== 'analisis') { load(); } else { updateAnPeriodUI(); }
 updatePeriodUI();
 
-if('serviceWorker' in navigator){
+// El service worker es solo para la versión web; dentro de la app Android no hace falta
+if('serviceWorker' in navigator && !window.Capacitor){
   window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 }
 </script>
