@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fondo de la app: el mismo color de fondo que usa la parte web -->
+    <color name="appBackground">#0F0F0F</color>
+</resources>

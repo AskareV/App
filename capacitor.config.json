@@ -1,5 +1,11 @@
 {
   "appId": "com.askarev.misfinanzas",
   "appName": "Mis Finanzas",
-  "webDir": "www"
+  "webDir": "www",
+  "backgroundColor": "#0f0f0f",
+  "plugins": {
+    "SystemBars": {
+      "style": "DARK"
+    }
+  }
 }
