@@ -5,11 +5,15 @@
   "description": "Mis Finanzas: control personal de gastos, ingresos y ahorro (app Android)",
   "scripts": {
     "sync": "cap sync android",
-    "apk": "bash scripts/build-apk.sh"
+    "apk": "bash scripts/build-apk.sh",
+    "test": "node tests/run.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",
-    "@capacitor/core": "^8.6.0"
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/share": "^8.0.3"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.0"
