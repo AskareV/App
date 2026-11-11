@@ -665,6 +665,7 @@ function applyMode() {
     document.getElementById('view-analisis-config').style.display = 'block';
     document.getElementById('antab-config').classList.add('active');
     document.getElementById('antab-chart').classList.remove('active');
+    document.getElementById('antab-hist').classList.remove('active');
   } else {
     const m = currentMode;
     document.documentElement.style.setProperty('--accent', m.accent);
@@ -958,7 +959,11 @@ function renderHistorico() {
     mesesConIngreso[k] = (mesesConIngreso[k] || 0) + e.amount;
   });
 
-  const mesesKeys = Object.keys(mesesConIngreso).sort();
+  // Orden cronológico (numérico: como texto, "2026-10" quedaría antes que "2026-4")
+  const mesesKeys = Object.keys(mesesConIngreso).sort((a,b) => {
+    const [ya,ma] = a.split('-').map(Number), [yb,mb] = b.split('-').map(Number);
+    return ya-yb || ma-mb;
+  });
   const nMeses = mesesKeys.length;
 
   // Objetivo: por cada mes con ingresos, debería haber ahorrado ingresos × %ahorro
@@ -1066,7 +1071,13 @@ function toast(msg) {
 }
 function fmtDate(iso){ return new Date(iso).toLocaleDateString('es-BO',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 function fmtMoney(n){ return 'Bs. '+n.toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function todayISO(){ return new Date().toISOString().split('T')[0]; }
+// Fecha de hoy según la hora del teléfono (no en UTC, que de noche ya es "mañana")
+function todayISO(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+const ESC_MAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>ESC_MAP[c]); }
 
 function showTab(tab) {
   hideAllViews();
@@ -1166,7 +1177,9 @@ function getWeeksInMonth(year,month){
   let w=1;
   while(current<=lastDay){
     const weekEnd=new Date(current); weekEnd.setDate(weekEnd.getDate()+6);
-    weeks.push({week:w,start:current<firstDay?new Date(firstDay):new Date(current),end:weekEnd>lastDay?new Date(lastDay):new Date(weekEnd)});
+    // El fin de cada semana abarca su último día completo (hasta las 23:59:59)
+    const end=weekEnd>lastDay?new Date(lastDay):new Date(weekEnd); end.setHours(23,59,59,999);
+    weeks.push({week:w,start:current<firstDay?new Date(firstDay):new Date(current),end});
     current.setDate(current.getDate()+7); w++;
   }
   return weeks;
@@ -1237,7 +1250,7 @@ function renderStats(){
     return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <div style="width:32px;height:32px;border-radius:8px;background:${m.bg};display:flex;align-items:center;justify-content:center;font-size:16px">${m.icon}</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:500;color:var(--text)">${cat}</div><div style="font-size:11px;color:var(--text2)">${filtered.filter(e=>e.cat===cat).length} ${currentMode.nounPlural} · ${pct}%</div></div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:500;color:var(--text)">${esc(cat)}</div><div style="font-size:11px;color:var(--text2)">${filtered.filter(e=>e.cat===cat).length} ${currentMode.nounPlural} · ${pct}%</div></div>
         <div style="font-size:14px;font-weight:600;font-family:var(--mono);color:var(--accent-text)">${fmtMoney(amt)}</div>
       </div>
       <div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent);border-radius:2px;transition:width .4s"></div></div>
@@ -1248,7 +1261,9 @@ function renderStats(){
 // ── LIST ─────────────────────────────────────────────
 function renderCatChips(){
   const cats=[...new Set(getFilteredExpenses().map(e=>e.cat))];
-  document.getElementById('cat-chips').innerHTML=`<div class="chip ${!activeFilter?'active':''}" onclick="setFilter('')">Todos</div>`+cats.map(c=>`<div class="chip ${activeFilter===c?'active':''}" onclick="setFilter('${c}')">${currentMode.cats[c]?.icon||''} ${c}</div>`).join('');
+  const el=document.getElementById('cat-chips');
+  el.innerHTML=`<div class="chip ${!activeFilter?'active':''}" data-cat="">Todos</div>`+cats.map(c=>`<div class="chip ${activeFilter===c?'active':''}" data-cat="${esc(c)}">${currentMode.cats[c]?.icon||''} ${esc(c)}</div>`).join('');
+  el.onclick=ev=>{const chip=ev.target.closest('.chip'); if(chip) setFilter(chip.dataset.cat||'');};
 }
 function setFilter(cat){activeFilter=cat;renderList();}
 function renderList(){
@@ -1270,8 +1285,8 @@ function renderList(){
       <div class="item-top">
         <div class="cat-icon" style="background:${m.bg}">${m.icon}</div>
         <div class="item-info">
-          <div class="item-detail" title="${e.detail}">${e.detail}</div>
-          <div class="item-meta"><span class="item-cat">${e.cat}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span></div>
+          <div class="item-detail" title="${esc(e.detail)}">${esc(e.detail)}</div>
+          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span></div>
         </div>
         <div class="item-amount">${fmtMoney(e.amount)}</div>
       </div>
