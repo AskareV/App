@@ -1,0 +1,17 @@
+{
+  "name": "mis-finanzas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mis Finanzas: control personal de gastos, ingresos y ahorro (app Android)",
+  "scripts": {
+    "sync": "cap sync android",
+    "apk": "bash scripts/build-apk.sh"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0"
+  }
+}
