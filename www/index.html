@@ -158,6 +158,30 @@
     .rv-card .btn-row{margin-top:12px}
     .rv-card .btn-secondary.armed{border-color:var(--danger);color:#f07070}
     .rv-pair{border-color:var(--blue)}
+
+    /* Préstamos */
+    .form-hint{font-size:12px;color:var(--text2);line-height:1.5;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px}
+    .loan-note{font-size:12px;color:var(--text2);line-height:1.5;background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px}
+    .item-meta{flex-wrap:wrap;row-gap:4px}
+    .tag-loan{font-size:10px;font-weight:600;color:var(--blue-text);background:var(--blue-dim);border:1px solid var(--blue);border-radius:10px;padding:1px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+    .tag-loan.done{color:#6fcf8a;background:#0f2015;border-color:#1f4030}
+    .loan-sub{font-size:11px;color:var(--text2);margin-top:6px}
+    .loan-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px}
+    .loan-card.done{opacity:.8}
+    .loan-left{flex-shrink:0;text-align:right}
+    .loan-left .ll-val{font-size:16px;font-weight:600;font-family:var(--mono);color:var(--accent-text);letter-spacing:-.5px}
+    .loan-left .ll-val.done{color:#6fcf8a;font-size:13px}
+    .loan-left .ll-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em}
+    .loan-bar{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin:12px 0 8px}
+    .loan-bar div{height:100%;background:#4caf72;border-radius:2px}
+    .loan-returns{font-size:11px;color:var(--text2);font-family:var(--mono);line-height:1.7}
+    .loan-card .btn-action{margin-top:10px;width:100%}
+    .btn-action.repay:active{background:#0f2015;border-color:#4caf72;color:#6fcf8a}
+    .rv-loans{margin-top:10px}
+    .rv-loans-lbl{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
+    .loan-chip{padding:9px 12px;border-radius:var(--radius-sm);font-size:12px;border:1px solid var(--border2);color:var(--text2);background:var(--bg2);margin-bottom:6px;cursor:pointer;user-select:none}
+    .loan-chip.active{border-color:var(--accent);color:var(--accent-text);background:var(--accent-dim)}
+    .rv-suggest{font-size:12px;color:var(--blue-text);margin-bottom:8px}
     .rv-pair-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     .rv-pair .rv-raw{margin-bottom:10px}
     .rv-pair-note{font-size:12px;color:var(--text2);line-height:1.5;margin-top:2px}
@@ -327,6 +351,7 @@
     <div class="tab active" onclick="showTab('add')" id="tab-add">+ Agregar</div>
     <div class="tab" onclick="showTab('list')" id="tab-list">Historial</div>
     <div class="tab" onclick="showTab('stats')" id="tab-stats">Resumen</div>
+    <div class="tab" onclick="showTab('loans')" id="tab-loans">Préstamos</div>
   </div>
 
   <!-- Tabs análisis -->
@@ -364,6 +389,11 @@
           <input type="date" id="inp-date">
         </div>
       </div>
+      <div class="field" id="loan-field" style="display:none">
+        <label>¿Qué préstamo te devolvieron?</label>
+        <div class="csel-trigger" id="inp-loan" onclick="openCsel('inp-loan')"><span id="inp-loan-lbl">Elegir préstamo</span></div>
+      </div>
+      <div class="form-hint" id="cat-hint" style="display:none"></div>
       <div class="field">
         <label>Detalle</label>
         <textarea id="inp-detail" placeholder="..."></textarea>
@@ -456,6 +486,11 @@
     </div>
     <div class="breakdown-lbl" id="breakdown-label">Por categoría</div>
     <div id="cat-breakdown"></div>
+  </div>
+
+  <!-- TAB: PRÉSTAMOS -->
+  <div class="scroll" id="view-loans" style="display:none">
+    <div id="loans-content"></div>
   </div>
 
   <!-- TAB: ANÁLISIS - CONFIGURACIÓN -->
@@ -589,6 +624,29 @@
   </div>
 </div>
 
+<!-- Registrar devolución -->
+<div class="modal-overlay" id="repay-modal" onclick="closeRepay(event)">
+  <div class="modal-box">
+    <div class="modal-title">Registrar devolución</div>
+    <div class="modal-sub wrap" id="repay-detail">—</div>
+    <div class="field">
+      <label>Monto devuelto</label>
+      <div class="amount-wrap">
+        <span class="prefix">Bs.</span>
+        <input type="number" id="repay-amount" placeholder="0.00" inputmode="decimal" min="0" step="0.01">
+      </div>
+    </div>
+    <div class="field">
+      <label>Fecha</label>
+      <input type="date" id="repay-date">
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="modal-btn cancel" onclick="closeRepay()">Cancelar</button>
+      <button class="modal-btn accept" id="btn-repay-confirm" onclick="confirmRepay()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Delete modal -->
 <div class="modal-overlay" id="del-modal" onclick="closeModal(event)">
   <div class="modal-box">
@@ -662,6 +720,7 @@ const MODES = {
       'Educación':{icon:'📚',bg:'#0e1a18'},
       'Diezmo':{icon:'⛪',bg:'#141a1a'},
       'Ofrenda':{icon:'🙏',bg:'#1a1410'},
+      'Préstamo':{icon:'🤝',bg:'#0f1a1f'},
       'Otro':{icon:'📦',bg:'#181818'},
     },
   },
@@ -674,6 +733,7 @@ const MODES = {
     cats:{
       'Sueldos':{icon:'💼',bg:'#0f1f14'},
       'Encuestas':{icon:'📋',bg:'#101520'},
+      'Devolución':{icon:'↩️',bg:'#101a14'},
       'Otros':{icon:'📦',bg:'#181818'},
     },
   },
@@ -736,7 +796,8 @@ const SORT_OPTS = [
   {value:'amount-asc',  label:'Menor monto'},
 ];
 const cselState = {
-  'inp-cat': { value: 'Alimentación', options: [], onChange: null },
+  'inp-cat': { value: 'Alimentación', options: [], onChange: () => onCatChange() },
+  'inp-loan': { value: '', options: [], onChange: () => onLoanPicked() },
   'sort':    { value: 'date-desc', options: SORT_OPTS, onChange: () => renderList() },
 };
 let activeCsel = null;
@@ -746,17 +807,18 @@ function openCsel(id) {
   if (!state) return;
   activeCsel = id;
   document.getElementById('csel-title').textContent =
-    id === 'inp-cat' ? (currentModeKey === 'gastos' ? 'Categoría' : 'Tipo') : 'Ordenar por';
-  document.getElementById('csel-options').innerHTML = state.options.map(function(opt) {
+    id === 'inp-cat' ? (currentModeKey === 'gastos' ? 'Categoría' : 'Tipo')
+    : id === 'inp-loan' ? '¿Qué préstamo te devolvieron?' : 'Ordenar por';
+  document.getElementById('csel-options').innerHTML = state.options.length ? state.options.map(function(opt) {
     const isSel = state.value === opt.value;
-    return '<div class="csel-opt' + (isSel ? ' sel' : '') + '" data-val="' + opt.value + '">'
-      + '<span>' + opt.label + '</span>'
+    return '<div class="csel-opt' + (isSel ? ' sel' : '') + '" data-val="' + esc(opt.value) + '">'
+      + '<span>' + esc(opt.label) + '</span>'
       + (isSel ? '<span class="chk">\u2713</span>' : '')
       + '</div>';
-  }).join('');
+  }).join('') : '<div class="csel-opt" style="color:var(--text2)">No hay préstamos pendientes</div>';
   document.getElementById('csel-options').onclick = function(e) {
     const row = e.target.closest('.csel-opt');
-    if (row) pickCsel(row.getAttribute('data-val'));
+    if (row && row.hasAttribute('data-val')) pickCsel(row.getAttribute('data-val'));
   };
   document.getElementById('csel-overlay').classList.add('show');
 }
@@ -820,6 +882,7 @@ function applyMode() {
     const catOpts = Object.entries(m.cats).map(([n,meta]) => ({value:n, label:meta.icon+' '+n}));
     populateCsel('inp-cat', catOpts, m.defaultCat);
     document.getElementById('inp-detail').placeholder = m.placeholder;
+    onCatChange();
     document.getElementById('edit-banner-text').textContent = `✏️ Editando ${m.noun}`;
     document.getElementById('btn-submit').textContent = `Agregar ${m.noun}`;
     document.getElementById('del-modal-title').textContent = `¿Eliminar este ${m.noun}?`;
@@ -833,10 +896,10 @@ function applyMode() {
 }
 
 function hideAllViews() {
-  ['view-add','view-list','view-stats','view-analisis-config','view-analisis-chart','view-analisis-hist'].forEach(id => {
+  ['view-add','view-list','view-stats','view-loans','view-analisis-config','view-analisis-chart','view-analisis-hist'].forEach(id => {
     document.getElementById(id).style.display = 'none';
   });
-  ['tab-add','tab-list','tab-stats'].forEach(id => {
+  ['tab-add','tab-list','tab-stats','tab-loans'].forEach(id => {
     const el = document.getElementById(id); if(el) el.classList.remove('active');
   });
 }
@@ -935,8 +998,16 @@ function renderChart() {
 
   const allGastos   = getMonthData('gastos-app-v1',    anYear,  anMonth);
   const allIngresos = getMonthData('ingresos-app-v1',  anYear,  anMonth);
-  const gastosMes   = filterMonth(allGastos,   anYear,  anMonth);
-  const ingresosMes = filterMonth(allIngresos, anYear,  anMonth);
+  // Préstamos y devoluciones no son gastos ni ingresos: se muestran aparte
+  const gastosMesTodo   = filterMonth(allGastos,   anYear,  anMonth);
+  const ingresosMesTodo = filterMonth(allIngresos, anYear,  anMonth);
+  const gastosMes   = gastosMesTodo.filter(e => !isLoanFlow(e));
+  const ingresosMes = ingresosMesTodo.filter(e => !isLoanFlow(e));
+  const prestadoMes = sumAmount(gastosMesTodo.filter(isLoanFlow));
+  const devueltoMes = sumAmount(ingresosMesTodo.filter(isLoanFlow));
+  const loanLine = (prestadoMes || devueltoMes)
+    ? `<div class="loan-note" style="margin:12px 0 0">${[prestadoMes ? '🤝 Prestaste ' + fmtMoney(prestadoMes) : '', devueltoMes ? '↩️ te devolvieron ' + fmtMoney(devueltoMes) : ''].filter(Boolean).join(' · ')}. No se cuentan como gasto ni como ingreso.</div>`
+    : '';
 
   // Diezmo: se registra el mes siguiente (mes vencido)
   const gastosNextMes    = filterMonth(allGastos, nextYear, nextMonth);
@@ -949,7 +1020,7 @@ function renderChart() {
   const balance          = totalIngresos - totalGastos;
 
   if(totalIngresos===0 && totalGastos===0) {
-    el.innerHTML = `<div class="no-data"><div class="nd-icon">📊</div><p>Sin datos en <strong>${MONTHS[anMonth]} ${anYear}</strong>.<br>Registra ingresos y gastos primero.</p></div>`;
+    el.innerHTML = `<div class="no-data"><div class="nd-icon">📊</div><p>Sin datos en <strong>${MONTHS[anMonth]} ${anYear}</strong>.<br>Registra ingresos y gastos primero.</p></div>` + loanLine;
     return;
   }
 
@@ -1050,6 +1121,7 @@ function renderChart() {
           <div style="font-size:14px;font-weight:600;font-family:var(--mono);color:#c4b5fd">${fmtM(totalDiezmoReal)}</div>
         </div>
       </div>
+      ${loanLine}
     </div>
 
     <div class="donut-wrap">
@@ -1091,13 +1163,18 @@ function renderHistorico() {
 
   const fmtM = n => 'Bs. ' + n.toLocaleString('es-BO', {minimumFractionDigits:2, maximumFractionDigits:2});
 
-  const totalIngresos = ingresos.reduce((s,e) => s + e.amount, 0);
-  const totalGastos = gastos.reduce((s,e) => s + e.amount, 0);
+  // Lo que hay en la cuenta cuenta todo lo que entró y salió, préstamos incluidos.
+  // El ahorro, en cambio, no cambia por prestar: ese dinero sigue siendo tuyo.
+  const enCuenta = ingresos.reduce((s,e) => s + e.amount, 0) - gastos.reduce((s,e) => s + e.amount, 0);
+  const ingresosReales = ingresos.filter(e => !isLoanFlow(e));
+  const totalIngresos = ingresosReales.reduce((s,e) => s + e.amount, 0);
+  const totalGastos = gastos.filter(e => !isLoanFlow(e)).reduce((s,e) => s + e.amount, 0);
   const balanceReal = totalIngresos - totalGastos;
+  const meDeben = loanStatuses().reduce((s,x) => s + x.remaining, 0);
 
   // Meses con ingresos (clave year-month)
   const mesesConIngreso = {};
-  ingresos.forEach(e => {
+  ingresosReales.forEach(e => {
     const d = new Date(e.date);
     const k = d.getFullYear() + '-' + d.getMonth();
     mesesConIngreso[k] = (mesesConIngreso[k] || 0) + e.amount;
@@ -1149,13 +1226,24 @@ function renderHistorico() {
   +   '</div>'
   + '</div>'
 
-  + '<div class="balance-card ' + (balanceReal>=0?'positive':'negative') + '" style="margin-bottom:8px">'
+  + '<div class="balance-card ' + (enCuenta>=0?'positive':'negative') + '" style="margin-bottom:8px">'
   +   '<div class="bc-icon">💳</div>'
   +   '<div class="bc-info">'
   +     '<div class="bc-lbl">Tengo en la cuenta</div>'
-  +     '<div class="bc-val">' + fmtM(balanceReal) + '</div>'
+  +     '<div class="bc-val">' + fmtM(enCuenta) + '</div>'
   +   '</div>'
   + '</div>'
+
+  + (meDeben > 0
+    ? '<div class="balance-card neutral" style="margin-bottom:8px">'
+      + '<div class="bc-icon">🤝</div>'
+      + '<div class="bc-info">'
+      +   '<div class="bc-lbl">Me deben (préstamos)</div>'
+      +   '<div class="bc-val" style="color:var(--blue-text)">' + fmtM(meDeben) + '</div>'
+      +   '<div style="font-size:11px;color:var(--text2);margin-top:3px">Sigue siendo tuyo: cuenta como ahorro</div>'
+      + '</div>'
+      + '</div>'
+    : '')
 
   + '<div class="balance-card neutral" style="margin-bottom:8px">'
   +   '<div class="bc-icon">🎯</div>'
@@ -1230,29 +1318,48 @@ function showTab(tab) {
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='list') renderList();
   if(tab==='stats') renderStats();
+  if(tab==='loans') renderLoans();
 }
 
 // ── FORM ─────────────────────────────────────────────
 function submitForm() {
   const amount=parseFloat(document.getElementById('inp-amount').value);
-  const detail=document.getElementById('inp-detail').value.trim();
+  let detail=document.getElementById('inp-detail').value.trim();
   const cat=getCsel('inp-cat');
   const dateVal=document.getElementById('inp-date').value||todayISO();
   if(!amount||amount<=0){toast('⚠ Ingresa un monto válido');return;}
+  // Una devolución tiene que decir de qué préstamo es
+  let loanId=null;
+  if(currentModeKey==='ingresos' && cat===REPAY_CAT){
+    const st=loanStatuses().find(x=>String(x.loan.id)===getCsel('inp-loan'));
+    if(!st){toast('⚠ Elige qué préstamo te devolvieron');return;}
+    loanId=st.loan.id;
+    if(!detail) detail='Devolución: '+st.loan.detail;
+  }
   if(!detail){toast(`⚠ Escribe el detalle del ${currentMode.noun}`);return;}
+  const nounDone = cat===LOAN_CAT ? 'Préstamo' : cat===REPAY_CAT ? 'Devolución' : cap(currentMode.noun);
+  const femenino = cat===REPAY_CAT;
+  let released=0;
   if(editingId!==null){
     const idx=expenses.findIndex(e=>e.id===editingId);
-    if(idx!==-1){ const {pending, ...rest}=expenses[idx]; expenses[idx]={...rest,amount,detail,cat,date:dateVal+'T12:00:00'}; }
-    toast(`✓ ${cap(currentMode.noun)} actualizado`);
+    if(idx!==-1){
+      const {pending, loanId: _prevLoan, ...rest}=expenses[idx];
+      // Si un préstamo deja de serlo, sus devoluciones pasan a ser ingresos normales
+      if(currentModeKey==='gastos' && rest.cat===LOAN_CAT && cat!==LOAN_CAT) released=releaseRepayments(rest.id);
+      expenses[idx]={...rest,amount,detail,cat,date:dateVal+'T12:00:00',...(loanId!=null?{loanId}:{})};
+    }
+    toast(`✓ ${nounDone} ${femenino?'actualizada':'actualizado'}`+(released?` · ${plural(released,'devolución pasó','devoluciones pasaron')} a «Otros»`:''));
     cancelEdit();
   } else {
-    expenses.unshift({id:Date.now(),amount,detail,cat,date:dateVal+'T12:00:00'});
-    toast(`✓ ${cap(currentMode.noun)} registrado`);
+    expenses.unshift({id:Date.now(),amount,detail,cat,date:dateVal+'T12:00:00',...(loanId!=null?{loanId}:{})});
+    toast(`✓ ${nounDone} ${femenino?'registrada':'registrado'}`);
     document.getElementById('inp-amount').value='';
     document.getElementById('inp-detail').value='';
     document.getElementById('inp-date').value=todayISO();
+    if(loanId!=null) setCsel('inp-loan','');
   }
   save(); updateAll();
+  onCatChange();
 }
 
 function startEdit(id) {
@@ -1261,6 +1368,7 @@ function startEdit(id) {
   document.getElementById('inp-amount').value=e.amount;
   document.getElementById('inp-detail').value=e.detail;
   setCsel('inp-cat', e.cat);
+  onCatChange(e.loanId);
   document.getElementById('inp-date').value=e.date.split('T')[0];
   document.getElementById('edit-banner').classList.add('show');
   document.getElementById('form-card').classList.add('editing');
@@ -1274,6 +1382,8 @@ function cancelEdit() {
   document.getElementById('inp-amount').value='';
   document.getElementById('inp-detail').value='';
   if(currentMode) setCsel('inp-cat', currentMode.defaultCat);
+  setCsel('inp-loan', '');
+  if(currentMode) onCatChange();
   document.getElementById('inp-date').value=todayISO();
   document.getElementById('edit-banner').classList.remove('show');
   document.getElementById('form-card').classList.remove('editing');
@@ -1286,16 +1396,23 @@ let pendingDeleteId=null;
 function deleteExpense(id){
   const e=expenses.find(x=>x.id===id); if(!e) return;
   pendingDeleteId=id;
-  document.getElementById('modal-detail').textContent=e.detail+' — '+fmtMoney(e.amount);
+  const st = currentModeKey==='gastos' && e.cat===LOAN_CAT ? loanStatuses().find(x=>x.loan.id===id) : null;
+  const n = st ? st.returns.length : 0;
+  const sub = document.getElementById('modal-detail');
+  sub.textContent=e.detail+' — '+fmtMoney(e.amount)
+    + (n ? `. Tiene ${plural(n,'devolución registrada','devoluciones registradas')}: ${n===1?'quedará':'quedarán'} como ${n===1?'ingreso normal':'ingresos normales'} («Otros»).` : '');
+  sub.classList.toggle('wrap', n>0);
   document.getElementById('del-modal').classList.add('show');
 }
 function confirmDelete(){
   if(pendingDeleteId===null) return;
   if(editingId===pendingDeleteId) cancelEdit();
+  const removed=expenses.find(e=>e.id===pendingDeleteId);
+  if(currentModeKey==='gastos' && removed && removed.cat===LOAN_CAT) releaseRepayments(removed.id);
   expenses=expenses.filter(e=>e.id!==pendingDeleteId);
   pendingDeleteId=null;
   document.getElementById('del-modal').classList.remove('show');
-  save(); updateAll(); renderList();
+  save(); updateAll(); refreshCurrentTab();
   toast(`🗑 ${cap(currentMode.noun)} eliminado`);
 }
 function closeModal(e){
@@ -1308,7 +1425,7 @@ function closeModal(e){
 function updateAll(){
   if(currentModeKey==='analisis') return;
   const now=new Date();
-  const monthData=expenses.filter(e=>{const d=new Date(e.date);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
+  const monthData=expenses.filter(e=>{const d=new Date(e.date);return !isLoanFlow(e)&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
   const total=monthData.reduce((s,e)=>s+e.amount,0);
   document.getElementById('topbar-sub').textContent=`${monthData.length} ${currentMode.nounPlural} en ${MONTHS[now.getMonth()]} · ${fmtMoney(total)}`;
 }
@@ -1360,12 +1477,16 @@ function resetPeriod(){const now=new Date();selYear=now.getFullYear();selMonth=n
 function refreshCurrentTab(){
   if(document.getElementById('view-list').style.display!=='none') renderList();
   if(document.getElementById('view-stats').style.display!=='none') renderStats();
+  if(document.getElementById('view-loans').style.display!=='none') renderLoans();
 }
 
 // ── STATS ─────────────────────────────────────────────
 function renderStats(){
   updatePeriodUI();
-  const filtered=getFilteredExpenses();
+  const all=getFilteredExpenses();
+  // Préstamos y devoluciones no son gastos ni ingresos: van aparte
+  const filtered=all.filter(e=>!isLoanFlow(e));
+  const apart=all.filter(isLoanFlow);
   // Diezmo es mes vencido (del mes anterior) — se excluye de los totales del mes
   const filteredSinDiezmo=filtered.filter(e=>e.cat!=='Diezmo');
   const total=filteredSinDiezmo.reduce((s,e)=>s+e.amount,0);
@@ -1388,8 +1509,12 @@ function renderStats(){
   filtered.forEach(e=>{bycat[e.cat]=(bycat[e.cat]||0)+e.amount;});
   const sorted=Object.entries(bycat).sort((a,b)=>b[1]-a[1]);
   const el=document.getElementById('cat-breakdown');
-  if(!sorted.length){el.innerHTML=`<div class="empty"><div class="icon">📊</div><p>Sin ${currentMode.nounPlural} en este período.</p></div>`;return;}
-  el.innerHTML=sorted.map(([cat,amt])=>{
+  const apartTotal=apart.reduce((s,e)=>s+e.amount,0);
+  const note=apart.length?`<div class="loan-note">${currentModeKey==='gastos'
+    ?`🤝 Prestaste ${fmtMoney(apartTotal)} en este período. No se cuenta como gasto: lo ves en «Préstamos».`
+    :`↩️ Te devolvieron ${fmtMoney(apartTotal)} en este período. No se cuenta como ingreso: se descuenta de lo que te deben.`}</div>`:'';
+  if(!sorted.length){el.innerHTML=note+`<div class="empty"><div class="icon">📊</div><p>Sin ${currentMode.nounPlural} en este período.</p></div>`;return;}
+  el.innerHTML=note+sorted.map(([cat,amt])=>{
     const pct=total>0?Math.round(amt/total*100):0;
     const m=currentMode.cats[cat]||{icon:'📦',bg:'#181818'};
     return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">
@@ -1424,6 +1549,18 @@ function renderList(){
   else list.sort((a,b)=>b.date.localeCompare(a.date));
   const el=document.getElementById('list');
   if(!list.length){el.innerHTML=`<div class="empty"><div class="icon">${currentMode.emptyIcon}</div><p>${expenses.length?`Sin ${currentMode.nounPlural} en este período.`:`Aún no tienes ${currentMode.nounPlural} registrados.<br>¡Agrega el primero!`}</p></div>`;return;}
+  const loans=new Map(loanStatuses().map(x=>[x.loan.id,x]));
+  const loanTag=e=>{
+    if(currentModeKey==='gastos'&&e.cat===LOAN_CAT){
+      const st=loans.get(e.id);
+      return st&&st.remaining>0?`<span class="tag-loan">Te deben ${fmtMoney(st.remaining)}</span>`:'<span class="tag-loan done">✓ Devuelto</span>';
+    }
+    if(currentModeKey==='ingresos'&&e.cat===REPAY_CAT){
+      const st=loans.get(e.loanId);
+      return st?`<span class="tag-loan" title="${esc(st.loan.detail)}">De: ${esc(st.loan.detail)}</span>`:'<span class="tag-loan">Sin préstamo</span>';
+    }
+    return '';
+  };
   el.innerHTML=list.map(e=>{
     const m=currentMode.cats[e.cat]||{icon:'📦',bg:'#181818'};
     return `<div class="expense-item${editingId===e.id?' highlighted':''}">
@@ -1431,7 +1568,7 @@ function renderList(){
         <div class="cat-icon" style="background:${m.bg}">${m.icon}</div>
         <div class="item-info">
           <div class="item-detail" title="${esc(e.detail)}">${esc(e.detail)}</div>
-          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span>${e.pending?'<span class="tag-pending">Por revisar</span>':''}</div>
+          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span>${e.pending?'<span class="tag-pending">Por revisar</span>':''}${loanTag(e)}</div>
         </div>
         <div class="item-amount">${fmtMoney(e.amount)}</div>
       </div>
@@ -1441,6 +1578,184 @@ function renderList(){
       </div>
     </div>`;
   }).join('');
+}
+
+// ── PRÉSTAMOS ────────────────────────────────────────
+// Prestar dinero no es un gasto, y que te lo devuelvan no es un ingreso: el dinero sigue
+// siendo tuyo. Un préstamo se anota como gasto con la categoría «Préstamo» y cada devolución
+// como ingreso de tipo «Devolución», unido a su préstamo (loanId). Ninguno entra en los totales.
+const LOAN_CAT = 'Préstamo', REPAY_CAT = 'Devolución';
+function isLoanFlow(e) { return !!e && (e.cat === LOAN_CAT || e.cat === REPAY_CAT); }
+
+// Cada préstamo con lo que ya te devolvieron y lo que falta
+function loanStatuses() {
+  const returnsByLoan = new Map();
+  for (const r of readList(DATA_KEYS.ingresos)) {
+    if (r.cat !== REPAY_CAT || r.loanId == null) continue;
+    if (!returnsByLoan.has(r.loanId)) returnsByLoan.set(r.loanId, []);
+    returnsByLoan.get(r.loanId).push(r);
+  }
+  return readList(DATA_KEYS.gastos).filter(g => g.cat === LOAN_CAT).map(loan => {
+    const returns = (returnsByLoan.get(loan.id) || []).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const returned = Math.round(returns.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+    const remaining = Math.max(0, Math.round((loan.amount - returned) * 100) / 100);
+    return { loan, returns, returned, remaining };
+  });
+}
+
+// Si un préstamo se borra o deja de serlo, sus devoluciones pasan a ser ingresos normales
+function releaseRepayments(loanId) {
+  const ingresos = readList(DATA_KEYS.ingresos);
+  let n = 0;
+  const next = ingresos.map(r => {
+    if (r.cat !== REPAY_CAT || r.loanId !== loanId) return r;
+    n++;
+    const { loanId: _l, ...rest } = r;
+    return { ...rest, cat: 'Otros' };
+  });
+  if (n) localStorage.setItem(DATA_KEYS.ingresos, JSON.stringify(next));
+  return n;
+}
+
+// ── Formulario: aviso según la categoría y elección del préstamo ──
+function onCatChange(selectedLoanId) {
+  if (!currentMode) return;
+  const cat = getCsel('inp-cat');
+  const isLoan = currentModeKey === 'gastos' && cat === LOAN_CAT;
+  const isRepay = currentModeKey === 'ingresos' && cat === REPAY_CAT;
+  document.getElementById('loan-field').style.display = isRepay ? '' : 'none';
+  if (isRepay) fillLoanOptions(selectedLoanId);
+  let text = '';
+  if (isLoan) text = '🤝 No se cuenta como gasto: el dinero sigue siendo tuyo. Queda en «Préstamos» hasta que te lo devuelvan. En el detalle, pon a quién le prestaste.';
+  else if (isRepay) text = cselState['inp-loan'].options.length
+    ? '↩️ No se cuenta como ingreso: es tu dinero que vuelve. Se descuenta de lo que te deben.'
+    : '↩️ No tienes préstamos pendientes. Primero anota el préstamo como gasto, con la categoría «Préstamo».';
+  const hint = document.getElementById('cat-hint');
+  hint.textContent = text;
+  hint.style.display = text ? '' : 'none';
+  document.getElementById('inp-detail').placeholder =
+    isLoan ? 'Ej: Préstamo a Juan' : isRepay ? 'Opcional: se completa con el préstamo' : currentMode.placeholder;
+  if (editingId === null) {
+    document.getElementById('btn-submit').textContent = isLoan ? 'Agregar préstamo' : isRepay ? 'Agregar devolución' : `Agregar ${currentMode.noun}`;
+  }
+}
+// Préstamos que se pueden elegir: los que aún deben algo (y, al editar, el que ya estaba elegido)
+function fillLoanOptions(selectedLoanId) {
+  const keep = selectedLoanId != null ? String(selectedLoanId) : getCsel('inp-loan');
+  const opts = loanStatuses()
+    .filter(x => x.remaining > 0 || String(x.loan.id) === keep)
+    .sort((a, b) => String(b.loan.date).localeCompare(String(a.loan.date)))
+    .map(x => ({
+      value: String(x.loan.id),
+      label: x.loan.detail + ' · ' + (x.remaining > 0 ? 'falta ' + fmtMoney(x.remaining) : 'devuelto') + ' · ' + fmtDate(x.loan.date),
+    }));
+  const value = opts.some(o => o.value === keep) ? keep : '';
+  populateCsel('inp-loan', opts, value);
+  if (!value) document.getElementById('inp-loan-lbl').textContent = opts.length ? 'Elegir préstamo' : 'No hay préstamos pendientes';
+}
+// Al elegir el préstamo, si aún no hay monto, se propone lo que falta
+function onLoanPicked() {
+  const x = loanStatuses().find(s => String(s.loan.id) === getCsel('inp-loan'));
+  const amount = document.getElementById('inp-amount');
+  if (x && !amount.value && x.remaining > 0) amount.value = x.remaining;
+}
+
+// ── Pestaña «Préstamos» ──
+function renderLoans() {
+  const el = document.getElementById('loans-content');
+  const all = loanStatuses();
+  if (!all.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">🤝</div><p>No tienes préstamos registrados.<br>Cuando prestes dinero, anótalo como gasto con la categoría «Préstamo»: no se cuenta como gasto y aparece aquí hasta que te lo devuelvan.</p></div>';
+    return;
+  }
+  const byDateDesc = (a, b) => String(b.loan.date).localeCompare(String(a.loan.date)) || b.loan.id - a.loan.id;
+  const open = all.filter(x => x.remaining > 0).sort(byDateDesc);
+  const closed = all.filter(x => x.remaining <= 0).sort(byDateDesc);
+  const owed = open.reduce((s, x) => s + x.remaining, 0);
+  const returnsHtml = x => x.returns.length
+    ? `<div class="loan-returns">${x.returns.map(r => `↩ ${fmtDate(r.date)} · ${fmtMoney(r.amount)}`).join('<br>')}</div>` : '';
+  const card = (x, done) => {
+    const pct = x.loan.amount > 0 ? Math.min(100, Math.round(x.returned / x.loan.amount * 100)) : 100;
+    return `<div class="loan-card${done ? ' done' : ''}">
+      <div class="item-top">
+        <div class="cat-icon" style="background:#0f1a1f">🤝</div>
+        <div class="item-info">
+          <div class="item-detail" title="${esc(x.loan.detail)}">${esc(x.loan.detail)}</div>
+          <div class="item-meta"><span class="item-date">${fmtDate(x.loan.date)}</span><div class="item-dot"></div><span class="item-cat">Prestaste ${fmtMoney(x.loan.amount)}</span></div>
+        </div>
+        <div class="loan-left">${done
+          ? '<div class="ll-val done">✓ Devuelto</div>'
+          : `<div class="ll-val">${fmtMoney(x.remaining)}</div><div class="ll-lbl">falta</div>`}</div>
+      </div>
+      ${x.returns.length ? `<div class="loan-bar"><div style="width:${pct}%"></div></div>` : ''}
+      ${returnsHtml(x)}
+      ${done ? '' : `<button class="btn-action repay" data-loan="${x.loan.id}">↩️ Me devolvieron</button>`}
+    </div>`;
+  };
+  el.innerHTML = `
+    <div class="summary">
+      <div class="stat-card summary-wide">
+        <div class="lbl">Te deben</div>
+        <div class="val accent">${fmtMoney(owed)}</div>
+        <div class="loan-sub">${open.length ? plural(open.length, 'préstamo sin devolver', 'préstamos sin devolver') : 'Todos tus préstamos están devueltos'} · no se cuentan como gasto</div>
+      </div>
+    </div>
+    ${open.map(x => card(x, false)).join('')}
+    ${closed.length ? `<div class="breakdown-lbl" style="margin-top:18px">Devueltos</div>${closed.map(x => card(x, true)).join('')}` : ''}`;
+}
+document.getElementById('loans-content').addEventListener('click', ev => {
+  const btn = ev.target.closest('[data-loan]');
+  if (btn) openRepay(Number(btn.dataset.loan));
+});
+
+// ── Registrar una devolución desde la pestaña ──
+let repayLoanId = null;
+function openRepay(loanId) {
+  const x = loanStatuses().find(s => s.loan.id === loanId);
+  if (!x) return;
+  repayLoanId = loanId;
+  document.getElementById('repay-detail').textContent = x.loan.detail + ' · falta ' + fmtMoney(x.remaining);
+  document.getElementById('repay-amount').value = x.remaining;
+  document.getElementById('repay-date').value = todayISO();
+  document.getElementById('repay-modal').classList.add('show');
+}
+function closeRepay(e) {
+  if (e && e.target !== document.getElementById('repay-modal')) return;
+  repayLoanId = null;
+  document.getElementById('repay-modal').classList.remove('show');
+}
+function confirmRepay() {
+  const x = loanStatuses().find(s => s.loan.id === repayLoanId);
+  if (!x) { closeRepay(); return; }
+  const amount = parseFloat(document.getElementById('repay-amount').value);
+  if (!amount || amount <= 0) { toast('⚠ Ingresa un monto válido'); return; }
+  const day = document.getElementById('repay-date').value || todayISO();
+  const ingresos = readList(DATA_KEYS.ingresos);
+  ingresos.unshift({ id: newEntryId(ingresos), amount, detail: 'Devolución: ' + x.loan.detail, cat: REPAY_CAT, date: day + 'T12:00:00', loanId: x.loan.id });
+  localStorage.setItem(DATA_KEYS.ingresos, JSON.stringify(ingresos));
+  closeRepay();
+  refreshAfterDataChange();
+  toast(amount >= x.remaining ? '✓ Devolución registrada · préstamo saldado' : '✓ Devolución registrada · falta ' + fmtMoney(Math.round((x.remaining - amount) * 100) / 100));
+}
+
+// ── Pagos detectados: ¿es la devolución de un préstamo? ──
+const NAME_NOISE = new Set(['de', 'del', 'la', 'las', 'los', 'el', 'por', 'con', 'para', 'que', 'prestamo', 'prestamos',
+  'prestado', 'presto', 'pago', 'devolucion', 'ingreso', 'detectado', 'transferencia', 'banco', 'cuenta', 'qr']);
+function nameWords(text) {
+  return new Set(normalizeText(text || '').split(/[^a-z0-9ñ]+/).filter(w => w.length >= 3 && !NAME_NOISE.has(w)));
+}
+// El préstamo pendiente cuyo nombre coincide con quien te envía dinero (o null)
+function suggestLoanFor(entry, statuses) {
+  const from = nameWords(entry.detail);
+  if (!from.size) return null;
+  let best = null, bestScore = 0;
+  for (const x of statuses) {
+    if (x.remaining <= 0) continue;
+    let score = 0;
+    for (const w of nameWords(x.loan.detail)) if (from.has(w)) score++;
+    if (score > bestScore || (score === bestScore && score > 0 && String(x.loan.date) > String(best.loan.date))) { best = x; bestScore = score; }
+  }
+  return bestScore > 0 ? best : null;
 }
 
 // ── APP ANDROID ──────────────────────────────────────
@@ -1468,6 +1783,7 @@ function handleBack() {
   if (isShown('review-sheet')) { closeReview(); return true; }
   if (isShown('import-modal')) { closeImportModal(); return true; }
   if (isShown('del-modal')) { closeModal(); return true; }
+  if (isShown('repay-modal')) { closeRepay(); return true; }
   if (isShown('settings-modal')) { closeSettings(); return true; }
   if (currentModeKey === 'analisis') {
     if (!isVisible('view-analisis-config')) { showAnTab('config'); return true; }
@@ -1907,15 +2223,26 @@ function pairCardHtml(g, i) {
 function openReview() {
   const cards = reviewCards();
   if (!cards.length) { closeReview(); return; }
+  const statuses = loanStatuses();
+  const openLoans = statuses.filter(x => x.remaining > 0).sort((a, b) => String(b.loan.date).localeCompare(String(a.loan.date)));
   document.getElementById('review-list').innerHTML =
     '<div class="sheet-note">Se anotaron solos a partir de los avisos de tu banco. Ponles nombre y categoría, o descártalos si no corresponden.</div>' +
     cards.map(card => {
       if (card.type === 'pair') return pairCardHtml(card.g, card.i);
       const { kind, e } = card;
       const income = kind === 'ingresos';
+      // Dinero que llega de alguien a quien le prestaste: se propone como devolución
+      const suggested = income ? suggestLoanFor(e, statuses) : null;
+      const cat = suggested ? REPAY_CAT : e.cat;
       const chips = Object.entries(MODES[kind].cats).map(([name, meta]) =>
-        `<div class="chip${name === e.cat ? ' active' : ''}" data-cat="${esc(name)}">${meta.icon} ${esc(name)}</div>`).join('');
-      return `<div class="rv-card" data-kind="${kind}" data-id="${e.id}" data-cat="${esc(e.cat)}">
+        `<div class="chip${name === cat ? ' active' : ''}" data-cat="${esc(name)}">${meta.icon} ${esc(name)}</div>`).join('');
+      const loanChoices = income ? `<div class="rv-loans"${cat === REPAY_CAT ? '' : ' style="display:none"'}>
+          <div class="rv-loans-lbl">¿Qué préstamo te devolvieron?</div>
+          ${openLoans.length ? openLoans.map(x => `<div class="loan-chip${suggested && suggested.loan.id === x.loan.id ? ' active' : ''}" data-loan="${x.loan.id}">${esc(x.loan.detail)} · falta ${fmtMoney(x.remaining)}</div>`).join('')
+            : '<div class="sheet-note" style="margin:0">No tienes préstamos pendientes.</div>'}
+        </div>` : '';
+      return `<div class="rv-card" data-kind="${kind}" data-id="${e.id}" data-cat="${esc(cat)}"${suggested ? ` data-loan="${suggested.loan.id}"` : ''}>
+        ${suggested ? `<div class="rv-suggest">🤝 Parece que ${esc(suggested.loan.detail)} te devolvió dinero</div>` : ''}
         <div class="rv-top">
           <span class="rv-amount${income ? ' in' : ''}">${income ? '+' : ''}${fmtMoney(e.amount)}</span>
           <span class="rv-meta">${fmtDate(e.date)}${e.auto && e.auto.app ? ' · ' + esc(e.auto.app) : ''}</span>
@@ -1923,6 +2250,7 @@ function openReview() {
         ${e.auto && e.auto.text ? `<div class="rv-raw">${esc(e.auto.text)}</div>` : ''}
         <div class="field"><label>Nombre</label><input type="text" class="rv-name" value="${esc(e.detail)}" maxlength="200" autocomplete="off"></div>
         <div class="rv-cats">${chips}</div>
+        ${loanChoices}
         <div class="btn-row">
           <button class="btn-secondary show rv-discard">Descartar</button>
           <button class="btn-primary rv-save">Guardar</button>
@@ -1969,17 +2297,34 @@ document.getElementById('review-list').addEventListener('click', ev => {
     return;
   }
   const kind = card.dataset.kind, id = Number(card.dataset.id);
+  const loanChip = ev.target.closest('.loan-chip');
+  if (loanChip) {
+    card.dataset.loan = loanChip.dataset.loan;
+    card.querySelectorAll('.loan-chip').forEach(c => c.classList.toggle('active', c === loanChip));
+    return;
+  }
   const chip = ev.target.closest('.chip');
   if (chip) {
     card.dataset.cat = chip.dataset.cat;
     card.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+    const loans = card.querySelector('.rv-loans');
+    if (loans) loans.style.display = chip.dataset.cat === REPAY_CAT ? '' : 'none';
     return;
   }
   if (ev.target.closest('.rv-save')) {
     const name = card.querySelector('.rv-name').value.trim();
     if (!name) { toast('⚠ Ponle un nombre'); return; }
-    updateStoredEntry(kind, id, e => { const { pending, ...rest } = e; return { ...rest, detail: name, cat: card.dataset.cat }; });
-    finishReviewCard(card, '✓ Guardado');
+    const cat = card.dataset.cat;
+    let loanId = null;
+    if (kind === 'ingresos' && cat === REPAY_CAT) {
+      loanId = Number(card.dataset.loan);
+      if (!card.dataset.loan || !loanStatuses().some(x => x.loan.id === loanId)) { toast('⚠ Elige qué préstamo te devolvieron'); return; }
+    }
+    updateStoredEntry(kind, id, e => {
+      const { pending, loanId: _l, ...rest } = e;
+      return { ...rest, detail: name, cat, ...(loanId != null ? { loanId } : {}) };
+    });
+    finishReviewCard(card, cat === LOAN_CAT ? '✓ Guardado como préstamo' : cat === REPAY_CAT ? '✓ Guardado como devolución' : '✓ Guardado');
     return;
   }
   const discard = ev.target.closest('.rv-discard');

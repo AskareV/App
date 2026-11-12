@@ -27,6 +27,11 @@ Todo se guarda en `localStorage`:
 | `capture-done` | Avisos ya convertidos en movimientos (evita duplicados) |
 
 Las fechas se guardan como `AAAA-MM-DDT12:00:00` (mediodía, hora local).
+
+Préstamos: un préstamo es un gasto con `cat: "Préstamo"`, y cada devolución es un ingreso con
+`cat: "Devolución"` y `loanId` (el `id` del préstamo). Ninguno de los dos se suma a los
+gastos ni a los ingresos; la pestaña «Préstamos» muestra cuánto falta de cada uno, y
+«Tengo en la cuenta» (Análisis → Histórico) sí los incluye.
 En Ajustes (el engranaje) se puede exportar todo a un archivo e importarlo de vuelta.
 
 ## Pruebas

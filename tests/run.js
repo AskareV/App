@@ -591,7 +591,7 @@ async function main() {
     await page.click('#review-bar');
     const card = page.locator('#review-list .rv-card', { hasText: 'Carlos Mamani' });
     assert.strictEqual(await card.locator('.rv-amount').textContent(), '+Bs. 120,00');
-    assert.deepStrictEqual(await card.locator('.chip').allTextContents(), ['💼 Sueldos', '📋 Encuestas', '📦 Otros']);
+    assert.deepStrictEqual(await card.locator('.chip').allTextContents(), ['💼 Sueldos', '📋 Encuestas', '↩️ Devolución', '📦 Otros']);
   });
 
 
@@ -768,6 +768,246 @@ async function main() {
     await b.page.click('#btn-import-confirm');
     await b.page.waitForSelector('#review-bar.show');
     assert.strictEqual(await b.page.textContent('#review-bar-text'), '1 pago por revisar');
+  });
+
+
+  console.log('Préstamos');
+
+  // Un préstamo de 500 a Juan (y un gasto normal de 100) en noviembre
+  const conPrestamo = {
+    'gastos-app-v1': [mk(1, '2026-11-03', 100, 'Alimentación', 'Mercado'), mk(2, '2026-11-05', 500, 'Préstamo', 'Préstamo a Juan')],
+  };
+  const pickCsel = async (page, id, text) => {
+    await page.click('#' + id);
+    await page.click(`#csel-options .csel-opt:has-text("${text}")`);
+  };
+  const loanCards = (page) => page.$$eval('#loans-content .loan-card', (els) => els.map((e) => e.innerText.replace(/\s+/g, ' ').trim()));
+
+  await test('un préstamo no cuenta como gasto y aparece en «Préstamos»', async (open) => {
+    const { page } = await open({ seed: conPrestamo });
+    assert.match(await page.textContent('#topbar-sub'), /1 gastos en Noviembre · Bs\. 100,00/);
+    await page.click('#tab-stats');
+    assert.strictEqual(await page.textContent('#s-month'), 'Bs. 100,00');
+    assert.strictEqual(await page.textContent('#s-count'), '1');
+    assert.match(await page.textContent('#cat-breakdown'), /Prestaste Bs\. 500,00 en este período/);
+    assert.doesNotMatch(await page.textContent('#cat-breakdown'), /🤝\s*Préstamo\s*\d/);
+    await page.click('#tab-loans');
+    assert.strictEqual(await page.textContent('#loans-content .stat-card .val'), 'Bs. 500,00');
+    const [card] = await loanCards(page);
+    assert.match(card, /Préstamo a Juan/);
+    assert.match(card, /Bs\. 500,00 falta/i);
+    await page.click('#tab-list');
+    assert.match(await page.textContent('#list'), /Te deben Bs\. 500,00/);
+  });
+
+  await test('al elegir «Préstamo» el formulario explica que no cuenta como gasto', async (open) => {
+    const { page } = await open();
+    assert.strictEqual(await page.isVisible('#cat-hint'), false);
+    await pickCsel(page, 'inp-cat', 'Préstamo');
+    assert.match(await page.textContent('#cat-hint'), /No se cuenta como gasto/);
+    await page.fill('#inp-amount', '200');
+    await page.fill('#inp-detail', 'Préstamo a Ana');
+    await page.click('#btn-submit');
+    await expectToast(page, /Préstamo registrado/);
+    const g = (await stored(page, 'gastos-app-v1'))[0];
+    assert.strictEqual(g.cat, 'Préstamo');
+    assert.match(await page.textContent('#topbar-sub'), /0 gastos en Noviembre · Bs\. 0,00/);
+  });
+
+  await test('una devolución se registra en ingresos eligiendo su préstamo', async (open) => {
+    const { page } = await open({ seed: { ...conPrestamo, 'app-mode': 'ingresos' } });
+    await pickCsel(page, 'inp-cat', 'Devolución');
+    assert.strictEqual(await page.isVisible('#loan-field'), true);
+    assert.match(await page.textContent('#cat-hint'), /No se cuenta como ingreso/);
+    // Sin elegir préstamo no deja guardar
+    await page.fill('#inp-amount', '200');
+    await page.click('#btn-submit');
+    await expectToast(page, /Elige qué préstamo te devolvieron/);
+    assert.strictEqual(await stored(page, 'ingresos-app-v1'), null);
+    await pickCsel(page, 'inp-loan', 'Préstamo a Juan');
+    await page.click('#btn-submit');
+    await expectToast(page, /Devolución registrada/);
+    const [r] = await stored(page, 'ingresos-app-v1');
+    assert.deepStrictEqual({ amount: r.amount, cat: r.cat, loanId: r.loanId, detail: r.detail }, { amount: 200, cat: 'Devolución', loanId: 2, detail: 'Devolución: Préstamo a Juan' });
+    // No cuenta como ingreso
+    assert.match(await page.textContent('#topbar-sub'), /0 ingresos en Noviembre · Bs\. 0,00/);
+    await page.click('#tab-list');
+    assert.match(await page.textContent('#list'), /De: Préstamo a Juan/);
+    await page.click('#tab-loans');
+    assert.match((await loanCards(page))[0], /Bs\. 300,00 falta/i);
+  });
+
+  await test('al elegir el préstamo se propone lo que falta como monto', async (open) => {
+    const { page } = await open({ seed: { ...conPrestamo, 'app-mode': 'ingresos' } });
+    await pickCsel(page, 'inp-cat', 'Devolución');
+    await pickCsel(page, 'inp-loan', 'Préstamo a Juan');
+    assert.strictEqual(await page.inputValue('#inp-amount'), '500');
+  });
+
+  await test('sin préstamos pendientes, «Devolución» avisa y no deja guardar', async (open) => {
+    const { page } = await open({ seed: { 'app-mode': 'ingresos' } });
+    await pickCsel(page, 'inp-cat', 'Devolución');
+    assert.match(await page.textContent('#cat-hint'), /No tienes préstamos pendientes/);
+    await page.fill('#inp-amount', '50');
+    await page.fill('#inp-detail', 'Algo');
+    await page.click('#btn-submit');
+    await expectToast(page, /Elige qué préstamo/);
+    assert.strictEqual(await stored(page, 'ingresos-app-v1'), null);
+  });
+
+  await test('«Me devolvieron» en la pestaña registra la devolución y salda el préstamo', async (open) => {
+    const { page } = await open({ seed: conPrestamo });
+    await page.click('#tab-loans');
+    await page.click('#loans-content .loan-card >> text=Me devolvieron');
+    assert.strictEqual(await page.inputValue('#repay-amount'), '500');
+    await page.fill('#repay-amount', '150');
+    await page.click('#btn-repay-confirm');
+    await expectToast(page, /falta Bs\. 350,00/);
+    assert.match((await loanCards(page))[0], /Bs\. 350,00 falta/i);
+    assert.match((await loanCards(page))[0], /↩ 11\/11\/2026 · Bs\. 150,00/);
+    await page.click('#loans-content .loan-card >> text=Me devolvieron');
+    assert.strictEqual(await page.inputValue('#repay-amount'), '350');
+    await page.click('#btn-repay-confirm');
+    await expectToast(page, /préstamo saldado/);
+    assert.strictEqual(await page.textContent('#loans-content .stat-card .val'), 'Bs. 0,00');
+    assert.match(await page.textContent('#loans-content'), /Devueltos/);
+    assert.match((await loanCards(page))[0], /✓ Devuelto/);
+    assert.strictEqual(await page.locator('#loans-content button[data-loan]').count(), 0);
+    const ingresos = await stored(page, 'ingresos-app-v1');
+    assert.deepStrictEqual(ingresos.map((r) => [r.amount, r.cat, r.loanId]).sort(), [[150, 'Devolución', 2], [350, 'Devolución', 2]]);
+    // El préstamo saldado ya no se ofrece en el formulario de devolución
+    await page.click('#gear-btn'); await page.click('#mcard-ingresos');
+    await pickCsel(page, 'inp-cat', 'Devolución');
+    assert.match(await page.textContent('#cat-hint'), /No tienes préstamos pendientes/);
+  });
+
+  await test('en Análisis no cuentan; el histórico muestra lo que hay en la cuenta y lo que te deben', async (open) => {
+    const { page } = await open({ seed: {
+      'gastos-app-v1': [mk(1, '2026-11-03', 1000, 'Alimentación', 'Mercado'), mk(2, '2026-11-05', 500, 'Préstamo', 'Préstamo a Juan')],
+      'ingresos-app-v1': [mk(9, '2026-11-01', 3000, 'Sueldos', 'Sueldo'), { ...mk(10, '2026-11-08', 200, 'Devolución', 'Devolución: Juan'), loanId: 2 }],
+      'app-mode': 'analisis',
+    } });
+    await page.click('#antab-chart');
+    const chart = (await page.innerText('#an-chart-content')).replace(/\s+/g, ' ');
+    assert.match(chart, /INGRESOS Bs\. 3\.000,00 GASTOS Bs\. 1\.000,00/);
+    assert.match(chart, /Prestaste Bs\. 500,00 · ↩️ te devolvieron Bs\. 200,00/);
+    await page.click('#antab-hist');
+    const hist = (await page.innerText('#an-hist-content')).replace(/\s+/g, ' ');
+    assert.match(hist, /INGRESOS TOTALES Bs\. 3\.000,00 GASTOS TOTALES Bs\. 1\.000,00/);
+    // En la cuenta: 3000 + 200 − 1000 − 500
+    assert.match(hist, /TENGO EN LA CUENTA Bs\. 1\.700,00/);
+    assert.match(hist, /ME DEBEN \(PRÉSTAMOS\) Bs\. 300,00/);
+    // Ahorro 2000 (3000 − 1000) frente a una meta de 600 (20 %)
+    assert.match(hist, /OBJETIVO CUMPLIDO \+Bs\. 1\.400,00 por encima/);
+  });
+
+  await test('borrar un préstamo deja sus devoluciones como ingresos normales', async (open) => {
+    const { page } = await open({ seed: { ...conPrestamo, 'ingresos-app-v1': [{ ...mk(10, '2026-11-08', 200, 'Devolución', 'Devolución: Juan'), loanId: 2 }] } });
+    await page.click('#tab-list');
+    await page.locator('#list .expense-item', { hasText: 'Préstamo a Juan' }).locator('.btn-action.del').click();
+    assert.match(await page.textContent('#modal-detail'), /Tiene 1 devolución registrada: quedará como ingreso normal/);
+    await page.click('#del-modal .modal-btn.confirm');
+    const [r] = await stored(page, 'ingresos-app-v1');
+    assert.strictEqual(r.cat, 'Otros');
+    assert.strictEqual('loanId' in r, false);
+  });
+
+  await test('cambiar la categoría de un préstamo libera sus devoluciones', async (open) => {
+    const { page } = await open({ seed: { ...conPrestamo, 'ingresos-app-v1': [{ ...mk(10, '2026-11-08', 200, 'Devolución', 'Devolución: Juan'), loanId: 2 }] } });
+    await page.click('#tab-list');
+    await page.locator('#list .expense-item', { hasText: 'Préstamo a Juan' }).locator('.btn-action.edit').click();
+    await pickCsel(page, 'inp-cat', 'Otro');
+    await page.click('#btn-submit');
+    await expectToast(page, /1 devolución pasó a «Otros»/);
+    assert.strictEqual((await stored(page, 'ingresos-app-v1'))[0].cat, 'Otros');
+  });
+
+  await test('editar una devolución deja elegir su préstamo aunque ya esté saldado', async (open) => {
+    const { page } = await open({ seed: {
+      ...conPrestamo, 'app-mode': 'ingresos',
+      'ingresos-app-v1': [{ ...mk(10, '2026-11-08', 500, 'Devolución', 'Devolución: Juan'), loanId: 2 }],
+    } });
+    await page.click('#tab-list');
+    await page.click('#list .btn-action.edit');
+    assert.match(await page.textContent('#inp-loan-lbl'), /Préstamo a Juan · devuelto/);
+    await page.fill('#inp-amount', '450');
+    await page.click('#btn-submit');
+    const [r] = await stored(page, 'ingresos-app-v1');
+    assert.deepStrictEqual([r.amount, r.cat, r.loanId], [450, 'Devolución', 2]);
+  });
+
+  await test('pago detectado: se puede guardar como préstamo', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [aviso('n1', 'Tu transferencia de 300.00 bolivianos ha sido procesada')] } });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    await page.fill('#review-list .rv-name', 'Préstamo a Pedro');
+    await page.click('#review-list .chip:has-text("Préstamo")');
+    await page.click('#review-list .rv-save');
+    await expectToast(page, /Guardado como préstamo/);
+    const [g] = await stored(page, 'gastos-app-v1');
+    assert.deepStrictEqual([g.cat, g.detail, 'pending' in g], ['Préstamo', 'Préstamo a Pedro', false]);
+    await page.click('#tab-loans');
+    assert.match((await loanCards(page))[0], /Préstamo a Pedro/);
+  });
+
+  await test('dinero recibido de alguien a quien le prestaste: se propone como devolución', async (open) => {
+    const { page } = await open({
+      seed: { 'gastos-app-v1': [mk(1, '2026-11-01', 300, 'Préstamo', 'Préstamo a Juan Pérez'), mk(2, '2026-11-02', 100, 'Préstamo', 'Préstamo a Ana')] },
+      native: { enabled: true, captured: [aviso('n1', 'Recibio transferencia de la cuenta 1234567890 JUAN PEREZ AL BANCO NACIONAL DE BOLIVIA S.A., por Bs. 300.00 Concepto sin especificar')] },
+    });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    const card = page.locator('#review-list .rv-card');
+    assert.match(await card.textContent(), /Parece que Préstamo a Juan Pérez te devolvió dinero/);
+    assert.strictEqual(await card.locator('.chip.active').textContent(), '↩️ Devolución');
+    assert.match(await card.locator('.loan-chip.active').textContent(), /Préstamo a Juan Pérez · falta Bs\. 300,00/);
+    await card.locator('.rv-save').click();
+    await expectToast(page, /Guardado como devolución/);
+    const [r] = await stored(page, 'ingresos-app-v1');
+    assert.deepStrictEqual([r.cat, r.loanId], ['Devolución', 1]);
+    await page.click('#tab-loans');
+    assert.match(await page.textContent('#loans-content .stat-card .val'), /Bs\. 100,00/);
+  });
+
+  await test('dinero recibido sin coincidencia: se puede marcar como devolución eligiendo el préstamo', async (open) => {
+    const { page } = await open({
+      seed: { 'gastos-app-v1': [mk(1, '2026-11-01', 300, 'Préstamo', 'Préstamo a Juan')] },
+      native: { enabled: true, captured: [aviso('n1', 'Recibiste Bs 300 de Carla Rojas')] },
+    });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    const card = page.locator('#review-list .rv-card');
+    assert.strictEqual(await card.locator('.rv-loans').isVisible(), false);
+    await card.locator('.chip:has-text("Devolución")').click();
+    assert.strictEqual(await card.locator('.rv-loans').isVisible(), true);
+    await card.locator('.rv-save').click();
+    await expectToast(page, /Elige qué préstamo/);
+    await card.locator('.loan-chip').click();
+    await card.locator('.rv-save').click();
+    assert.strictEqual((await stored(page, 'ingresos-app-v1'))[0].loanId, 1);
+  });
+
+  await test('la copia de seguridad conserva préstamos y devoluciones unidos', async (open) => {
+    const seed = { ...conPrestamo, 'ingresos-app-v1': [{ ...mk(10, '2026-11-08', 200, 'Devolución', 'Devolución: Juan'), loanId: 2 }] };
+    const a = await open({ seed });
+    const { data } = await exportWeb(a.page);
+    const b = await open();
+    await importFile(b.page, data);
+    await importSummary(b.page);
+    await b.page.click('#btn-import-confirm');
+    await b.page.click('#tab-loans');
+    assert.match((await loanCards(b.page))[0], /Bs\. 300,00 falta/i);
+  });
+
+  await test('el botón atrás cierra la ventana de devolución', async (open) => {
+    const { page } = await open({ seed: conPrestamo, native: true });
+    await page.waitForFunction(() => !!window.__native.listeners['App:backButton']);
+    await page.click('#tab-loans');
+    await page.click('#loans-content .loan-card >> text=Me devolvieron');
+    await pressBack(page);
+    assert.strictEqual(await page.locator('#repay-modal.show').count(), 0);
+    await pressBack(page);
+    assert.strictEqual(await page.locator('#view-add').isVisible(), true);
   });
 
   await browser.close();
