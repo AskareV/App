@@ -810,6 +810,223 @@ async function main() {
     await page.waitForFunction(() => /falta permitir el aviso/.test(document.getElementById('capture-summary').textContent));
   });
 
+
+  console.log('Fijos');
+
+  // Plantillas de fijos tal como se guardan
+  const fijo = (id, kind, name, cat, day, start, amounts, upTo = null) =>
+    ({ id, kind, name, cat, day, start, amounts: amounts.map(([from, amount]) => ({ from, amount })), upTo });
+  const fixedOf = (list, fixedId) => (list || []).filter((e) => e.fixedId === fixedId).map((e) => [e.fixedMonth, e.amount, e.date.slice(0, 10)]).sort();
+
+  await test('un gasto fijo se anota solo y aparece en «Fijos»', async (open) => {
+    const { page } = await open();
+    await page.click('#tab-fixed');
+    assert.match(await page.textContent('#fixed-content'), /Aún no tienes gastos fijos/);
+    await page.click('#fixed-content .fx-add');
+    assert.strictEqual(await page.textContent('#fixed-sheet-title'), 'Nuevo gasto fijo');
+    // Préstamo no es una categoría para un fijo
+    assert.strictEqual(await page.locator('#fx-cats .chip:has-text("Préstamo")').count(), 0);
+    await page.fill('#fx-name', 'Micro');
+    await page.fill('#fx-amount', '120');
+    await page.fill('#fx-day', '1');
+    await page.click('#fx-cats .chip:has-text("Transporte")');
+    await page.click('#fx-save');
+    await expectToast(page, /Gasto fijo guardado · anotado en noviembre/);
+    const g = (await stored(page, 'gastos-app-v1'))[0];
+    assert.deepStrictEqual([g.amount, g.detail, g.cat, g.date, g.fixedMonth, g.fixedAuto], [120, 'Micro', 'Transporte', '2026-11-01T12:00:00', '2026-11', true]);
+    assert.match(await page.textContent('#topbar-sub'), /1 gastos en Noviembre · Bs\. 120,00/);
+    const text = (await page.innerText('#fixed-content')).replace(/\s+/g, ' ');
+    assert.match(text, /Gastos fijos −Bs\. 120,00/);
+    assert.match(text, /Quedan −Bs\. 120,00/);
+    assert.match(text, /Micro Transporte día 1 Bs\. 120,00 ✓ Anotado el 01\/11\/2026/);
+    await page.click('#tab-list');
+    assert.match(await page.textContent('#list'), /Fijo/);
+  });
+
+  await test('un ingreso fijo se anota recién cuando llega su día', async (open) => {
+    const seed = { 'app-mode': 'ingresos', 'fijos-app-v1': [fijo(7, 'ingresos', 'Sueldo', 'Sueldos', 30, '2026-11', [['2026-11', 2880.57]])] };
+    const a = await open({ seed });
+    assert.strictEqual(await stored(a.page, 'ingresos-app-v1'), null);
+    await a.page.click('#tab-fixed');
+    assert.match(await a.page.textContent('#fixed-content'), /Se anota el 30 de noviembre/);
+    const b = await open({ seed, now: '2026-11-30T08:00:00-04:00' });
+    assert.deepStrictEqual(fixedOf(await stored(b.page, 'ingresos-app-v1'), 7), [['2026-11', 2880.57, '2026-11-30']]);
+    assert.match(await b.page.textContent('#topbar-sub'), /1 ingresos en Noviembre · Bs\. 2\.880,57/);
+  });
+
+  await test('se ponen al día los meses en que no se abrió la app', async (open) => {
+    const { page } = await open({ seed: {
+      'fijos-app-v1': [fijo(7, 'gastos', 'Micro', 'Transporte', 1, '2026-09', [['2026-09', 120]], '2026-09')],
+      'gastos-app-v1': [{ ...mk(1, '2026-09-01', 120, 'Transporte', 'Micro'), fixedId: 7, fixedMonth: '2026-09', fixedAuto: true }],
+    } });
+    assert.deepStrictEqual(fixedOf(await stored(page, 'gastos-app-v1'), 7), [
+      ['2026-09', 120, '2026-09-01'], ['2026-10', 120, '2026-10-01'], ['2026-11', 120, '2026-11-01'],
+    ]);
+  });
+
+  await test('un fijo del día 31 se anota el último día en los meses cortos', async (open) => {
+    const { page } = await open({ now: '2027-02-28T09:00:00-04:00', seed: { 'fijos-app-v1': [fijo(7, 'gastos', 'Alquiler', 'Hogar', 31, '2027-02', [['2027-02', 1500]])] } });
+    assert.deepStrictEqual(fixedOf(await stored(page, 'gastos-app-v1'), 7), [['2027-02', 1500, '2027-02-28']]);
+  });
+
+  const conSueldo = {
+    'app-mode': 'ingresos',
+    'fijos-app-v1': [fijo(7, 'ingresos', 'Sueldo', 'Sueldos', 1, '2026-10', [['2026-10', 2880.57]], '2026-11')],
+    'ingresos-app-v1': [
+      { ...mk(1, '2026-11-01', 2880.57, 'Sueldos', 'Sueldo'), fixedId: 7, fixedMonth: '2026-11', fixedAuto: true },
+      { ...mk(2, '2026-10-01', 2880.57, 'Sueldos', 'Sueldo'), fixedId: 7, fixedMonth: '2026-10', fixedAuto: true },
+    ],
+  };
+
+  await test('un aumento de sueldo desde el próximo mes no cambia los meses anteriores', async (open) => {
+    const a = await open({ seed: conSueldo });
+    await a.page.click('#tab-fixed');
+    await a.page.click('#fixed-content .fx-card');
+    assert.strictEqual(await a.page.isVisible('#fx-from-field'), false);
+    await a.page.fill('#fx-amount', '3100');
+    assert.strictEqual(await a.page.isVisible('#fx-from-field'), true);
+    await a.page.click('#fx-from .chip:has-text("Desde diciembre")');
+    await a.page.click('#fx-save');
+    await expectToast(a.page, /Bs\. 3\.100,00 desde diciembre/);
+    assert.deepStrictEqual(fixedOf(await stored(a.page, 'ingresos-app-v1'), 7), [['2026-10', 2880.57, '2026-10-01'], ['2026-11', 2880.57, '2026-11-01']]);
+    assert.match(await a.page.textContent('#fixed-content'), /Desde diciembre: Bs\. 3\.100,00/);
+    // En diciembre ya se anota con el nuevo monto
+    const fijos = await stored(a.page, 'fijos-app-v1');
+    const b = await open({ now: '2026-12-02T09:00:00-04:00', seed: { ...conSueldo, 'fijos-app-v1': fijos, 'ingresos-app-v1': await stored(a.page, 'ingresos-app-v1') } });
+    assert.deepStrictEqual(fixedOf(await stored(b.page, 'ingresos-app-v1'), 7).map((x) => x[1]), [2880.57, 2880.57, 3100]);
+  });
+
+  await test('un cambio de monto desde este mes actualiza el de este mes', async (open) => {
+    const { page } = await open({ seed: conSueldo });
+    await page.click('#tab-fixed');
+    await page.click('#fixed-content .fx-card');
+    await page.fill('#fx-amount', '3100');
+    assert.match(await page.textContent('#fx-note'), /El de noviembre, si ya se anotó, pasa al nuevo monto/);
+    await page.click('#fx-save');
+    assert.deepStrictEqual(fixedOf(await stored(page, 'ingresos-app-v1'), 7).map((x) => x[1]), [2880.57, 3100]);
+  });
+
+  await test('si borras el de un mes, no vuelve a aparecer', async (open) => {
+    const { page } = await open({ seed: { 'fijos-app-v1': [fijo(7, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]])] } });
+    await page.click('#tab-list');
+    await page.click('#list .btn-action.del');
+    await page.click('#del-modal .modal-btn.confirm');
+    await page.reload();
+    assert.deepStrictEqual(await stored(page, 'gastos-app-v1'), []);
+    await page.click('#tab-fixed');
+    assert.match(await page.textContent('#fixed-content'), /Este mes no se cuenta/);
+  });
+
+  await test('eliminar un fijo deja los meses anotados y no anota más', async (open) => {
+    const a = await open({ seed: { 'fijos-app-v1': [fijo(7, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]])] } });
+    await a.page.click('#tab-fixed');
+    await a.page.click('#fixed-content .fx-card');
+    await a.page.click('#fx-delete');
+    assert.deepStrictEqual(await stored(a.page, 'fijos-app-v1') && (await stored(a.page, 'fijos-app-v1')).length, 1);
+    await a.page.click('#fx-delete');
+    await expectToast(a.page, /Fijo eliminado/);
+    assert.deepStrictEqual(await stored(a.page, 'fijos-app-v1'), []);
+    const gastos = await stored(a.page, 'gastos-app-v1');
+    assert.strictEqual(gastos.length, 1);
+    const b = await open({ now: '2026-12-05T09:00:00-04:00', seed: { 'fijos-app-v1': [], 'gastos-app-v1': gastos } });
+    assert.strictEqual((await stored(b.page, 'gastos-app-v1')).length, 1);
+  });
+
+  // El aviso del BMSC por el sueldo (nombre y cuenta inventados)
+  const sueldoBanco = (id, when, monto = '2,880.57') => ({ id, pkg: 'com.bmsc', app: 'BMSC Movil', title: 'Notificaciones',
+    text: `Recibio transferencia de la cuenta 1234567890 EMPRESA EJEMPLO SRL AL BANCO NACIONAL DE BOLIVIA S.A., por Bs. ${monto} Concepto Sueldo`, when: new Date(when).getTime() });
+  const sueldoFijo = { 'fijos-app-v1': [fijo(7, 'ingresos', 'Sueldo', 'Sueldos', 30, '2026-11', [['2026-11', 2880.57]])] };
+
+  await test('el aviso del banco por tu sueldo se reconoce y no se cuenta dos veces', async (open) => {
+    const { page } = await open({ now: '2026-11-30T10:05:00-04:00', seed: { ...sueldoFijo, 'app-mode': 'ingresos' },
+      native: { enabled: true, captured: [sueldoBanco('n1', '2026-11-30T10:00:00-04:00')] } });
+    await waitSynced(page);
+    // Antes de confirmar hay dos: el anotado solo y el del aviso
+    assert.strictEqual((await stored(page, 'ingresos-app-v1')).length, 2);
+    await page.click('#review-bar');
+    const card = page.locator('#review-list .rv-fixed');
+    assert.match(await card.textContent(), /¿Es tu ingreso fijo «Sueldo» de noviembre\?/);
+    await card.locator('.rv-isfixed').click();
+    await expectToast(page, /Anotado como tu fijo «Sueldo»/);
+    const ingresos = await stored(page, 'ingresos-app-v1');
+    assert.strictEqual(ingresos.length, 1);
+    assert.deepStrictEqual([ingresos[0].detail, ingresos[0].cat, ingresos[0].fixedMonth, 'pending' in ingresos[0], 'fixedAuto' in ingresos[0]], ['Sueldo', 'Sueldos', '2026-11', false, false]);
+    assert.match(await page.textContent('#topbar-sub'), /1 ingresos en Noviembre · Bs\. 2\.880,57/);
+    await page.click('#tab-fixed');
+    assert.match(await page.textContent('#fixed-content'), /con el aviso del banco/);
+  });
+
+  await test('si el sueldo llega antes de su día, después no se anota otra vez', async (open) => {
+    const a = await open({ now: '2026-11-28T10:05:00-04:00', seed: sueldoFijo, native: { enabled: true, captured: [sueldoBanco('n1', '2026-11-28T10:00:00-04:00', '2,900.00')] } });
+    await waitSynced(a.page);
+    await a.page.click('#review-bar');
+    await a.page.click('#review-list .rv-isfixed');
+    const ingresos = await stored(a.page, 'ingresos-app-v1');
+    assert.deepStrictEqual(fixedOf(ingresos, 7), [['2026-11', 2900, '2026-11-28']]);
+    const b = await open({ now: '2026-11-30T12:00:00-04:00', seed: { ...sueldoFijo, 'fijos-app-v1': await stored(a.page, 'fijos-app-v1'), 'ingresos-app-v1': ingresos } });
+    assert.deepStrictEqual(fixedOf(await stored(b.page, 'ingresos-app-v1'), 7), [['2026-11', 2900, '2026-11-28']]);
+  });
+
+  await test('«No, es otro» lo deja como un ingreso más', async (open) => {
+    const { page } = await open({ now: '2026-11-30T10:05:00-04:00', seed: sueldoFijo, native: { enabled: true, captured: [sueldoBanco('n1', '2026-11-30T10:00:00-04:00')] } });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    await page.click('#review-list .rv-notfixed');
+    assert.strictEqual(await page.locator('#review-list .rv-fixed').count(), 0);
+    assert.strictEqual(await page.locator('#review-list .rv-card').count(), 1);
+    assert.strictEqual((await stored(page, 'ingresos-app-v1')).length, 2);
+  });
+
+  await test('no se propone como fijo un monto muy distinto', async (open) => {
+    const { page } = await open({ now: '2026-11-30T10:05:00-04:00', seed: sueldoFijo, native: { enabled: true, captured: [sueldoBanco('n1', '2026-11-30T10:00:00-04:00', '1,500.00')] } });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    assert.strictEqual(await page.locator('#review-list .rv-fixed').count(), 0);
+  });
+
+  await test('Fijos resume lo que entra y sale cada mes', async (open) => {
+    const { page } = await open({ seed: { 'fijos-app-v1': [
+      fijo(7, 'ingresos', 'Sueldo', 'Sueldos', 30, '2026-11', [['2026-11', 2880.57]]),
+      fijo(8, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]]),
+      fijo(9, 'gastos', 'Alquiler', 'Hogar', 5, '2026-12', [['2026-12', 1500]]),
+    ] } });
+    await page.click('#tab-fixed');
+    const text = (await page.innerText('#fixed-content')).replace(/\s+/g, ' ');
+    assert.match(text, /Ingresos fijos \+Bs\. 2\.880,57 Gastos fijos −Bs\. 120,00 Quedan Bs\. 2\.760,57/);
+    assert.match(text, /Alquiler Hogar día 5 Bs\. 1\.500,00 Empieza en diciembre/);
+  });
+
+  await test('la copia de seguridad incluye los fijos y no los duplica', async (open) => {
+    const a = await open({ seed: { 'fijos-app-v1': [fijo(7, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]])] } });
+    const { data } = await exportWeb(a.page);
+    assert.strictEqual(data.fijos.length, 1);
+    const b = await open();
+    await importFile(b.page, data);
+    assert.strictEqual(await importSummary(b.page), 'Se añadirán 1 gasto y 0 ingresos, y 1 fijo.');
+    await b.page.click('#btn-import-confirm');
+    assert.strictEqual((await stored(b.page, 'fijos-app-v1')).length, 1);
+    assert.strictEqual((await stored(b.page, 'gastos-app-v1')).length, 1);
+    await b.page.reload();
+    assert.strictEqual((await stored(b.page, 'gastos-app-v1')).length, 1);
+  });
+
+  await test('el botón atrás cierra la hoja de fijos', async (open) => {
+    const { page } = await open({ native: true });
+    await page.waitForFunction(() => !!window.__native.listeners['App:backButton']);
+    await page.click('#tab-fixed');
+    await page.click('#fixed-content .fx-add');
+    await pressBack(page);
+    assert.strictEqual(await page.locator('#fixed-sheet.show').count(), 0);
+  });
+
+  await test('las cinco pestañas caben en un teléfono angosto', async (open) => {
+    const { page } = await open();
+    await page.setViewportSize({ width: 360, height: 740 });
+    const fits = await page.evaluate(() => [...document.querySelectorAll('#tabs-normal .tab')].every((t) => t.scrollWidth <= t.clientWidth + 1)
+      && document.documentElement.scrollWidth <= 360);
+    assert.strictEqual(fits, true);
+  });
+
   console.log('Préstamos');
 
   // Un préstamo de 500 a Juan (y un gasto normal de 100) en noviembre

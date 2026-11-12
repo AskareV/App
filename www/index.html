@@ -45,7 +45,7 @@
 
     /* Tabs */
     .tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
-    .tab{flex:1;padding:11px 0;text-align:center;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;user-select:none}
+    .tab{flex:1;min-width:0;padding:11px 0;text-align:center;font-size:12.5px;white-space:nowrap;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;user-select:none}
     .tab.active{color:var(--accent-text);border-bottom-color:var(--accent)}
     .scroll{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:16px 16px 100px}
 
@@ -182,6 +182,27 @@
     .loan-chip{padding:9px 12px;border-radius:var(--radius-sm);font-size:12px;border:1px solid var(--border2);color:var(--text2);background:var(--bg2);margin-bottom:6px;cursor:pointer;user-select:none}
     .loan-chip.active{border-color:var(--accent);color:var(--accent-text);background:var(--accent-dim)}
     .rv-suggest{font-size:12px;color:var(--blue-text);margin-bottom:8px}
+
+    /* Fijos */
+    .rv-fixed{border-color:#3b2f63}
+    .tag-fixed{font-size:10px;font-weight:600;color:#c4b5fd;background:#18132b;border:1px solid #3b2f63;border-radius:10px;padding:1px 7px;white-space:nowrap}
+    .fx-sum{display:grid;grid-template-columns:1fr auto;row-gap:6px;font-size:13px;color:var(--text2)}
+    .fx-sum .v{font-family:var(--mono);font-weight:600;text-align:right;color:var(--text)}
+    .fx-sum .v.in{color:#6fcf8a}
+    .fx-sum .v.out{color:#f5c842}
+    .fx-sum .total{border-top:1px solid var(--border);padding-top:8px;margin-top:2px;color:var(--text);font-weight:600}
+    .fx-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px;cursor:pointer}
+    .fx-card:active{border-color:var(--border2)}
+    .fx-state{font-size:11px;color:var(--text2);margin-top:10px;padding-top:9px;border-top:1px solid var(--border);display:flex;gap:8px}
+    .fx-state .ok{color:#6fcf8a}
+    .fx-hist{font-size:11px;color:var(--text3);margin-top:3px}
+    .fx-add{width:100%;padding:13px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);font-size:14px;font-weight:600;color:var(--accent-text);cursor:pointer;font-family:var(--font);margin-top:4px}
+    .fx-add:active{background:var(--bg2)}
+    .fx-opts{display:flex;gap:6px;flex-wrap:wrap}
+    .fx-form .field input{background:var(--bg3)}
+    .fx-note{font-size:12px;color:var(--text2);line-height:1.5;margin:-4px 0 12px}
+    .fx-del{display:block;width:100%;margin-top:14px;background:none;border:none;color:#f07070;font-size:13px;font-family:var(--font);cursor:pointer;padding:8px}
+    .fx-del.armed{font-weight:600}
     .rv-pair-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     .rv-pair .rv-raw{margin-bottom:10px}
     .rv-pair-note{font-size:12px;color:var(--text2);line-height:1.5;margin-top:2px}
@@ -352,6 +373,7 @@
     <div class="tab" onclick="showTab('list')" id="tab-list">Historial</div>
     <div class="tab" onclick="showTab('stats')" id="tab-stats">Resumen</div>
     <div class="tab" onclick="showTab('loans')" id="tab-loans">Préstamos</div>
+    <div class="tab" onclick="showTab('fixed')" id="tab-fixed">Fijos</div>
   </div>
 
   <!-- Tabs análisis -->
@@ -488,6 +510,11 @@
     <div id="cat-breakdown"></div>
   </div>
 
+  <!-- TAB: FIJOS -->
+  <div class="scroll" id="view-fixed" style="display:none">
+    <div id="fixed-content"></div>
+  </div>
+
   <!-- TAB: PRÉSTAMOS -->
   <div class="scroll" id="view-loans" style="display:none">
     <div id="loans-content"></div>
@@ -620,6 +647,48 @@
     <div class="modal-actions">
       <button class="modal-btn cancel" onclick="closeImportModal()">Cancelar</button>
       <button class="modal-btn accept" id="btn-import-confirm" onclick="confirmImport()">Importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gasto o ingreso fijo: crear o editar -->
+<div class="sheet-overlay" id="fixed-sheet" onclick="if(event.target===this)closeFixedSheet()">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div class="sheet-title" id="fixed-sheet-title">Nuevo gasto fijo</div>
+      <button class="sheet-close" onclick="closeFixedSheet()">Cerrar</button>
+    </div>
+    <div class="sheet-body fx-form">
+      <div class="field">
+        <label>Nombre</label>
+        <input type="text" id="fx-name" maxlength="80" autocomplete="off">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Monto al mes</label>
+          <div class="amount-wrap">
+            <span class="prefix">Bs.</span>
+            <input type="number" id="fx-amount" placeholder="0.00" inputmode="decimal" min="0" step="0.01">
+          </div>
+        </div>
+        <div class="field">
+          <label>Día del mes</label>
+          <input type="number" id="fx-day" inputmode="numeric" min="1" max="31" step="1">
+        </div>
+      </div>
+      <div class="field">
+        <label id="fx-cat-label">Categoría</label>
+        <div class="cat-chips" id="fx-cats" style="margin-bottom:0"></div>
+      </div>
+      <div class="field" id="fx-from-field">
+        <label id="fx-from-label">Empieza</label>
+        <div class="fx-opts" id="fx-from"></div>
+      </div>
+      <div class="fx-note" id="fx-note"></div>
+      <div class="btn-row">
+        <button class="btn-primary" id="fx-save" onclick="saveFixed()">Guardar</button>
+      </div>
+      <button class="fx-del" id="fx-delete" onclick="deleteFixed(this)">Eliminar este fijo</button>
     </div>
   </div>
 </div>
@@ -896,10 +965,10 @@ function applyMode() {
 }
 
 function hideAllViews() {
-  ['view-add','view-list','view-stats','view-loans','view-analisis-config','view-analisis-chart','view-analisis-hist'].forEach(id => {
+  ['view-add','view-list','view-stats','view-loans','view-fixed','view-analisis-config','view-analisis-chart','view-analisis-hist'].forEach(id => {
     document.getElementById(id).style.display = 'none';
   });
-  ['tab-add','tab-list','tab-stats','tab-loans'].forEach(id => {
+  ['tab-add','tab-list','tab-stats','tab-loans','tab-fixed'].forEach(id => {
     const el = document.getElementById(id); if(el) el.classList.remove('active');
   });
 }
@@ -1319,6 +1388,7 @@ function showTab(tab) {
   if(tab==='list') renderList();
   if(tab==='stats') renderStats();
   if(tab==='loans') renderLoans();
+  if(tab==='fixed') renderFixed();
 }
 
 // ── FORM ─────────────────────────────────────────────
@@ -1478,6 +1548,7 @@ function refreshCurrentTab(){
   if(document.getElementById('view-list').style.display!=='none') renderList();
   if(document.getElementById('view-stats').style.display!=='none') renderStats();
   if(document.getElementById('view-loans').style.display!=='none') renderLoans();
+  if(document.getElementById('view-fixed').style.display!=='none') renderFixed();
 }
 
 // ── STATS ─────────────────────────────────────────────
@@ -1568,7 +1639,7 @@ function renderList(){
         <div class="cat-icon" style="background:${m.bg}">${m.icon}</div>
         <div class="item-info">
           <div class="item-detail" title="${esc(e.detail)}">${esc(e.detail)}</div>
-          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span>${e.pending?'<span class="tag-pending">Por revisar</span>':''}${loanTag(e)}</div>
+          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span>${e.pending?'<span class="tag-pending">Por revisar</span>':''}${loanTag(e)}${e.fixedId!=null?'<span class="tag-fixed">Fijo</span>':''}</div>
         </div>
         <div class="item-amount">${fmtMoney(e.amount)}</div>
       </div>
@@ -1758,6 +1829,327 @@ function suggestLoanFor(entry, statuses) {
   return bestScore > 0 ? best : null;
 }
 
+// ── FIJOS ────────────────────────────────────────────
+// Gastos e ingresos que se repiten cada mes (el micro, el sueldo…). Se anotan una sola vez y la
+// app los suma sola cada mes, el día elegido, sin recordatorios. Cada mes queda como un
+// movimiento normal (con fixedId y fixedMonth): se puede editar o borrar como cualquier otro.
+const FIXED_KEY = 'fijos-app-v1';
+const FIXED_AMOUNT_TOLERANCE = 0.10; // ±10 % para reconocer el aviso del banco de un fijo
+const FIXED_DAYS_WINDOW = 7;         // ±7 días alrededor del día del fijo
+const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
+
+function readFixed() {
+  const v = readJSON(FIXED_KEY, []);
+  return Array.isArray(v) ? v.filter(f => f && typeof f === 'object' && f.id != null && Array.isArray(f.amounts) && f.amounts.length) : [];
+}
+function saveFixedList(list) { localStorage.setItem(FIXED_KEY, JSON.stringify(list)); }
+
+// Meses como 'AAAA-MM'
+function monthKeyOf(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+function addMonths(key, n) { const [y, m] = key.split('-').map(Number); return monthKeyOf(new Date(y, m - 1 + n, 1)); }
+function monthName(key) {
+  const [y, m] = key.split('-').map(Number);
+  return MONTHS[m - 1].toLowerCase() + (y !== new Date().getFullYear() ? ' ' + y : '');
+}
+// Día del fijo en ese mes: el 31 pasa a ser el último día en los meses más cortos
+function fixedDay(key, day) { const [y, m] = key.split('-').map(Number); return Math.min(day, new Date(y, m, 0).getDate()); }
+function fixedDateISO(key, day) { const [y, m] = key.split('-').map(Number); return ymd(new Date(y, m - 1, fixedDay(key, day))); }
+// Monto que vale en ese mes (si cambió, por ejemplo un aumento de sueldo)
+function amountFor(f, key) {
+  let a = f.amounts[0].amount;
+  for (const x of f.amounts) if (x.from <= key) a = x.amount;
+  return a;
+}
+
+// Anota los fijos que ya tocan y todavía no están, también los de meses en que la app no se
+// abrió. Cada mes se procesa una sola vez: si borras el de un mes, no vuelve a aparecer.
+// Devuelve cuántos movimientos anotó.
+function runFixed() {
+  const fixed = readFixed();
+  if (!fixed.length) return 0;
+  const now = new Date(), cur = monthKeyOf(now), today = now.getDate();
+  const lists = { gastos: readList(DATA_KEYS.gastos), ingresos: readList(DATA_KEYS.ingresos) };
+  let created = 0, changed = false;
+  for (const f of fixed) {
+    const list = lists[f.kind];
+    if (!list) continue;
+    let m = f.upTo ? addMonths(f.upTo, 1) : f.start;
+    while (m <= cur) {
+      if (m === cur && today < fixedDay(m, f.day)) break; // este mes todavía no toca
+      if (!list.some(e => e.fixedId === f.id && e.fixedMonth === m)) {
+        list.unshift({
+          id: newEntryId(list), amount: amountFor(f, m), detail: f.name, cat: f.cat,
+          date: fixedDateISO(m, f.day) + 'T12:00:00', fixedId: f.id, fixedMonth: m, fixedAuto: true,
+        });
+        created++;
+      }
+      f.upTo = m;
+      changed = true;
+      m = addMonths(m, 1);
+    }
+  }
+  if (changed) {
+    saveFixedList(fixed);
+    if (created) {
+      localStorage.setItem(DATA_KEYS.gastos, JSON.stringify(lists.gastos));
+      localStorage.setItem(DATA_KEYS.ingresos, JSON.stringify(lists.ingresos));
+    }
+  }
+  return created;
+}
+
+// Fijos de una copia de seguridad que aún no están aquí
+function planFixed(existing, incoming) {
+  if (!Array.isArray(incoming)) return [];
+  const ids = new Set(existing.map(f => f.id));
+  const out = [];
+  for (const f of incoming) {
+    if (!f || typeof f !== 'object' || f.id == null || ids.has(f.id)) continue;
+    if (!['gastos', 'ingresos'].includes(f.kind) || typeof f.name !== 'string' || !f.name.trim()) continue;
+    const day = Number(f.day);
+    if (!Number.isInteger(day) || day < 1 || day > 31 || !MONTH_KEY_RE.test(String(f.start))) continue;
+    const amounts = (Array.isArray(f.amounts) ? f.amounts : [])
+      .map(a => ({ from: String(a && a.from), amount: Number(a && a.amount) }))
+      .filter(a => MONTH_KEY_RE.test(a.from) && Number.isFinite(a.amount) && a.amount > 0)
+      .sort((a, b) => a.from.localeCompare(b.from));
+    if (!amounts.length) continue;
+    out.push({
+      id: f.id, kind: f.kind, name: f.name.trim().slice(0, 80), cat: String(f.cat || (f.kind === 'gastos' ? 'Otro' : 'Otros')).slice(0, 60),
+      day, start: String(f.start), amounts, upTo: MONTH_KEY_RE.test(String(f.upTo)) ? String(f.upTo) : null,
+    });
+    ids.add(f.id);
+  }
+  return out;
+}
+
+// ── Pestaña «Fijos» ──
+function fixedKindOfMode() { return currentModeKey === 'ingresos' ? 'ingresos' : 'gastos'; }
+function renderFixed() {
+  const el = document.getElementById('fixed-content');
+  const fixed = readFixed();
+  const kind = fixedKindOfMode();
+  const cur = monthKeyOf(new Date());
+  const monthly = k => fixed.filter(f => f.kind === k && f.start <= cur).reduce((s, f) => s + amountFor(f, cur), 0);
+  const inc = monthly('ingresos'), out = monthly('gastos');
+  const list = readList(DATA_KEYS[kind]);
+  const mine = fixed.filter(f => f.kind === kind).sort((a, b) => a.day - b.day || a.name.localeCompare(b.name));
+  const noun = kind === 'gastos' ? 'gasto' : 'ingreso';
+
+  const summary = fixed.length ? `<div class="an-section">
+      <div class="an-section-title">Cada mes (${monthName(cur)})</div>
+      <div class="fx-sum">
+        <span>Ingresos fijos</span><span class="v in">+${fmtMoney(inc)}</span>
+        <span>Gastos fijos</span><span class="v out">−${fmtMoney(out)}</span>
+        <span class="total">Quedan</span><span class="v total">${inc - out < 0 ? '−' + fmtMoney(out - inc) : fmtMoney(inc - out)}</span>
+      </div>
+    </div>` : '';
+
+  const card = f => {
+    const meta = MODES[kind].cats[f.cat] || { icon: '📌', bg: '#181818' };
+    // Un cambio de monto ya programado (no el monto con el que empieza)
+    const next = f.start <= cur ? f.amounts.find(x => x.from > cur) : null;
+    const entry = list.find(e => e.fixedId === f.id && e.fixedMonth === cur);
+    let state;
+    if (f.start > cur) state = `Empieza en ${monthName(f.start)}`;
+    else if (entry) state = `<span class="ok">✓ Anotado el ${fmtDate(entry.date)}</span>${entry.fixedAuto ? '' : ' · con el aviso del banco'}`;
+    else if (f.upTo && f.upTo >= cur) state = 'Este mes no se cuenta (lo borraste del historial)';
+    else state = `Se anota el ${fixedDay(cur, f.day)} de ${monthName(cur)}`;
+    return `<div class="fx-card" data-fixed="${f.id}">
+      <div class="item-top">
+        <div class="cat-icon" style="background:${meta.bg}">${meta.icon}</div>
+        <div class="item-info">
+          <div class="item-detail" title="${esc(f.name)}">${esc(f.name)}</div>
+          <div class="item-meta"><span class="item-cat">${esc(f.cat)}</span><div class="item-dot"></div><span class="item-date">día ${f.day}</span></div>
+          ${next ? `<div class="fx-hist">Desde ${monthName(next.from)}: ${fmtMoney(next.amount)}</div>` : ''}
+        </div>
+        <div class="item-amount">${fmtMoney(amountFor(f, cur))}</div>
+      </div>
+      <div class="fx-state">${state}</div>
+    </div>`;
+  };
+
+  el.innerHTML = summary
+    + (mine.length
+      ? `<div class="breakdown-lbl" style="margin-top:4px">${kind === 'gastos' ? 'Gastos fijos' : 'Ingresos fijos'}</div>${mine.map(card).join('')}`
+      : `<div class="empty"><div class="icon">📌</div><p>${kind === 'gastos'
+        ? 'Aún no tienes gastos fijos.<br>Anota aquí lo que se repite cada mes, como el presupuesto del micro o el alquiler: se suma solo el día que elijas, sin recordatorios.'
+        : 'Aún no tienes ingresos fijos.<br>Anota aquí lo que recibes cada mes, como tu sueldo: se suma solo el día que elijas.'}</p></div>`)
+    + `<button class="fx-add" onclick="openFixedSheet()">+ Agregar ${noun} fijo</button>`;
+}
+document.getElementById('fixed-content').addEventListener('click', ev => {
+  const card = ev.target.closest('.fx-card');
+  if (card) openFixedSheet(Number(card.dataset.fixed));
+});
+
+// ── Crear o editar un fijo ──
+let fixedEditing = null, fixedSheetKind = 'gastos', fixedCat = null, fixedFrom = 'cur';
+function fixedCats(kind) { return Object.keys(MODES[kind].cats).filter(c => c !== LOAN_CAT && c !== REPAY_CAT); }
+function openFixedSheet(id) {
+  const f = id != null ? readFixed().find(x => x.id === id) : null;
+  const kind = f ? f.kind : fixedKindOfMode();
+  const cur = monthKeyOf(new Date());
+  fixedEditing = f ? f.id : null;
+  fixedSheetKind = kind;
+  fixedCat = f ? f.cat : MODES[kind].defaultCat;
+  fixedFrom = 'cur';
+  document.getElementById('fixed-sheet-title').textContent = (f ? 'Editar ' : 'Nuevo ') + (kind === 'gastos' ? 'gasto fijo' : 'ingreso fijo');
+  const name = document.getElementById('fx-name');
+  name.value = f ? f.name : '';
+  name.placeholder = kind === 'gastos' ? 'Ej: Micro, Alquiler, Internet' : 'Ej: Sueldo';
+  document.getElementById('fx-amount').value = f ? amountFor(f, cur) : '';
+  document.getElementById('fx-day').value = f ? f.day : 1;
+  document.getElementById('fx-cat-label').textContent = kind === 'gastos' ? 'Categoría' : 'Tipo';
+  const del = document.getElementById('fx-delete');
+  del.style.display = f ? '' : 'none';
+  del.classList.remove('armed');
+  del.textContent = 'Eliminar este fijo';
+  renderFixedSheetParts();
+  document.getElementById('fixed-sheet').classList.add('show');
+}
+function closeFixedSheet() { document.getElementById('fixed-sheet').classList.remove('show'); fixedEditing = null; }
+// El monto cambió respecto al que vale este mes (solo al editar)
+function fixedAmountChanged() {
+  if (fixedEditing == null) return false;
+  const f = readFixed().find(x => x.id === fixedEditing);
+  const amount = parseFloat(document.getElementById('fx-amount').value);
+  return !!f && Number.isFinite(amount) && Math.abs(amount - amountFor(f, monthKeyOf(new Date()))) >= 0.005;
+}
+function renderFixedSheetParts() {
+  const kind = fixedSheetKind, cur = monthKeyOf(new Date()), next = addMonths(cur, 1);
+  document.getElementById('fx-cats').innerHTML = fixedCats(kind).map(c =>
+    `<div class="chip${c === fixedCat ? ' active' : ''}" data-cat="${esc(c)}">${MODES[kind].cats[c].icon} ${esc(c)}</div>`).join('');
+  const editing = fixedEditing != null;
+  const changed = fixedAmountChanged();
+  const showFrom = !editing || changed;
+  document.getElementById('fx-from-field').style.display = showFrom ? '' : 'none';
+  document.getElementById('fx-from-label').textContent = editing ? 'El nuevo monto vale' : 'Empieza';
+  document.getElementById('fx-from').innerHTML = [['cur', (editing ? 'Desde ' : 'Este mes · ') + monthName(cur)], ['next', (editing ? 'Desde ' : 'El próximo mes · ') + monthName(next)]]
+    .map(([v, l]) => `<div class="chip${fixedFrom === v ? ' active' : ''}" data-from="${v}">${esc(l)}</div>`).join('');
+  const noun = kind === 'gastos' ? 'gasto' : 'ingreso';
+  let note;
+  if (!editing) note = `Se suma solo como ${noun} el día elegido de cada mes. Sin recordatorios: si un mes no corresponde, borras ese mes en el Historial.`;
+  else if (changed) note = fixedFrom === 'cur'
+    ? `Los meses anteriores no cambian. El de ${monthName(cur)}, si ya se anotó, pasa al nuevo monto.`
+    : `Los meses anteriores y ${monthName(cur)} no cambian.`;
+  else note = 'Los cambios valen para los meses que vienen; los ya anotados no cambian.';
+  document.getElementById('fx-note').textContent = note;
+}
+document.getElementById('fx-cats').addEventListener('click', ev => {
+  const chip = ev.target.closest('.chip');
+  if (chip) { fixedCat = chip.dataset.cat; renderFixedSheetParts(); }
+});
+document.getElementById('fx-from').addEventListener('click', ev => {
+  const chip = ev.target.closest('.chip');
+  if (chip) { fixedFrom = chip.dataset.from; renderFixedSheetParts(); }
+});
+document.getElementById('fx-amount').addEventListener('input', () => { if (fixedEditing != null) renderFixedSheetParts(); });
+
+function saveFixed() {
+  const name = document.getElementById('fx-name').value.trim();
+  const amount = Math.round(parseFloat(document.getElementById('fx-amount').value) * 100) / 100;
+  const day = Number(document.getElementById('fx-day').value);
+  if (!name) { toast('⚠ Ponle un nombre'); return; }
+  if (!(amount > 0)) { toast('⚠ Ingresa un monto válido'); return; }
+  if (!Number.isInteger(day) || day < 1 || day > 31) { toast('⚠ El día debe ser del 1 al 31'); return; }
+  const cur = monthKeyOf(new Date()), from = fixedFrom === 'next' ? addMonths(cur, 1) : cur;
+  const fixed = readFixed();
+  const noun = fixedSheetKind === 'gastos' ? 'Gasto fijo' : 'Ingreso fijo';
+  let msg;
+  if (fixedEditing == null) {
+    const f = { id: Date.now(), kind: fixedSheetKind, name, cat: fixedCat, day, start: from, amounts: [{ from, amount }], upTo: null };
+    saveFixedList(fixed.concat([f]));
+    const created = runFixed();
+    msg = `✓ ${noun} guardado · ` + (created ? `anotado en ${monthName(cur)}` : `se anota el ${fixedDay(from, day)} de ${monthName(from)}`);
+  } else {
+    const f = fixed.find(x => x.id === fixedEditing);
+    if (!f) { closeFixedSheet(); return; }
+    const changed = fixedAmountChanged();
+    f.name = name; f.cat = fixedCat; f.day = day;
+    if (changed) {
+      // El nuevo monto vale desde ese mes; los cambios que estaban programados después se reemplazan
+      f.amounts = f.amounts.filter(x => x.from < from).concat([{ from, amount }]).sort((a, b) => a.from.localeCompare(b.from));
+      if (from === cur) {
+        const list = readList(DATA_KEYS[f.kind]);
+        const e = list.find(x => x.fixedId === f.id && x.fixedMonth === cur && x.fixedAuto);
+        if (e) { e.amount = amount; localStorage.setItem(DATA_KEYS[f.kind], JSON.stringify(list)); }
+      }
+    }
+    saveFixedList(fixed);
+    runFixed();
+    msg = '✓ Cambios guardados' + (changed ? ` · ${fmtMoney(amount)} desde ${monthName(from)}` : '');
+  }
+  closeFixedSheet();
+  refreshAfterDataChange();
+  toast(msg);
+}
+function deleteFixed(btn) {
+  if (!btn.classList.contains('armed')) {
+    btn.classList.add('armed');
+    btn.textContent = '¿Eliminar? Los meses ya anotados se quedan';
+    setTimeout(() => { btn.classList.remove('armed'); btn.textContent = 'Eliminar este fijo'; }, 4000);
+    return;
+  }
+  saveFixedList(readFixed().filter(x => x.id !== fixedEditing));
+  closeFixedSheet();
+  refreshAfterDataChange();
+  toast('🗑 Fijo eliminado · ya no se anotará');
+}
+
+// ── Pagos detectados: ¿es uno de tus fijos? ──
+// Un aviso del banco con un monto parecido (±10 %) cerca del día de un fijo (±7 días) se
+// propone como el de ese mes: así el sueldo no se cuenta dos veces y queda el monto real.
+function matchFixed(e, kind, fixed, lists) {
+  if (!e || !e.pending || e.notFixed || e.fixedId != null) return null;
+  const when = e.auto && Number.isFinite(e.auto.when) ? new Date(e.auto.when) : new Date(e.date);
+  const here = monthKeyOf(when);
+  let best = null, bestScore = Infinity;
+  for (const f of fixed) {
+    if (f.kind !== kind) continue;
+    for (const m of [addMonths(here, -1), here, addMonths(here, 1)]) {
+      if (m < f.start) continue;
+      const due = new Date(fixedDateISO(m, f.day) + 'T12:00:00');
+      const days = Math.abs(when - due) / 86400000;
+      const expected = amountFor(f, m);
+      const diff = Math.abs(e.amount - expected) / expected;
+      if (days > FIXED_DAYS_WINDOW || diff > FIXED_AMOUNT_TOLERANCE) continue;
+      // Si ese mes ya tiene un movimiento real (no el anotado solo), no es este
+      if (lists[kind].some(x => x.fixedId === f.id && x.fixedMonth === m && !x.fixedAuto && x.id !== e.id)) continue;
+      const score = diff * 10 + days / FIXED_DAYS_WINDOW;
+      if (score < bestScore) { best = { f, m }; bestScore = score; }
+    }
+  }
+  return best;
+}
+function fixedCardHtml(kind, e, match) {
+  const { f, m } = match;
+  const income = kind === 'ingresos';
+  return `<div class="rv-card rv-fixed" data-kind="${kind}" data-id="${e.id}" data-fixed="${f.id}" data-month="${m}">
+    <div class="rv-pair-title">📌 ¿Es tu ${income ? 'ingreso' : 'gasto'} fijo «${esc(f.name)}» de ${monthName(m)}?</div>
+    <div class="rv-top">
+      <span class="rv-amount${income ? ' in' : ''}">${income ? '+' : ''}${fmtMoney(e.amount)}</span>
+      <span class="rv-meta">${fmtDate(e.date)}${e.auto && e.auto.app ? ' · ' + esc(e.auto.app) : ''}</span>
+    </div>
+    ${e.auto && e.auto.text ? `<div class="rv-raw">${esc(e.auto.text)}</div>` : ''}
+    <div class="rv-pair-note">Ya lo tienes como fijo (${fmtMoney(amountFor(f, m))}, día ${f.day}). Si es el mismo, se queda con este monto real y no se cuenta dos veces.</div>
+    <div class="btn-row">
+      <button class="btn-secondary show rv-notfixed">No, es otro</button>
+      <button class="btn-primary rv-isfixed">Sí, es ese</button>
+    </div>
+  </div>`;
+}
+// El aviso del banco pasa a ser el fijo de ese mes (y se quita el que se había anotado solo)
+function confirmFixedMatch(kind, id, fixedId, month) {
+  const f = readFixed().find(x => x.id === fixedId);
+  if (!f) return null;
+  const list = readList(DATA_KEYS[kind]).filter(x => !(x.fixedId === fixedId && x.fixedMonth === month && x.fixedAuto));
+  const i = list.findIndex(x => x.id === id);
+  if (i === -1) return null;
+  const { pending, notFixed, ...rest } = list[i];
+  list[i] = { ...rest, detail: f.name, cat: f.cat, fixedId, fixedMonth: month };
+  localStorage.setItem(DATA_KEYS[kind], JSON.stringify(list));
+  return f;
+}
+
 // ── APP ANDROID ──────────────────────────────────────
 // Dentro de la app Android hay un "puente" nativo; en la versión web no.
 const Native = (() => {
@@ -1784,6 +2176,7 @@ function handleBack() {
   if (isShown('import-modal')) { closeImportModal(); return true; }
   if (isShown('del-modal')) { closeModal(); return true; }
   if (isShown('repay-modal')) { closeRepay(); return true; }
+  if (isShown('fixed-sheet')) { closeFixedSheet(); return true; }
   if (isShown('settings-modal')) { closeSettings(); return true; }
   if (currentModeKey === 'analisis') {
     if (!isVisible('view-analisis-config')) { showAnTab('config'); return true; }
@@ -1827,6 +2220,7 @@ function buildBackup() {
   return {
     app: 'mis-finanzas', version: 1, exportedAt: new Date().toISOString(),
     gastos: readList(DATA_KEYS.gastos), ingresos: readList(DATA_KEYS.ingresos), pcts: readSavedPcts(),
+    fijos: readFixed(),
   };
 }
 
@@ -1901,6 +2295,7 @@ function planImport(data) {
     gastos: planList(readList(DATA_KEYS.gastos), data.gastos),
     ingresos: planList(readList(DATA_KEYS.ingresos), data.ingresos),
     pcts: cleanPcts(data.pcts),
+    fijos: planFixed(readFixed(), data.fijos),
   };
 }
 
@@ -1923,11 +2318,12 @@ function importFile(input) {
     try { data = JSON.parse(reader.result); } catch (e) { data = null; }
     const plan = planImport(data);
     if (!plan) { toast('⚠ Ese archivo no es una copia de Mis Finanzas'); return; }
-    const nG = plan.gastos.nuevos.length, nI = plan.ingresos.nuevos.length;
+    const nG = plan.gastos.nuevos.length, nI = plan.ingresos.nuevos.length, nF = plan.fijos.length;
     const rep = plan.gastos.repetidos + plan.ingresos.repetidos;
     const inv = plan.gastos.invalidos + plan.ingresos.invalidos;
-    if (!nG && !nI) { closeSettings(); toast(rep ? '✓ Esa copia no trae nada nuevo' : '⚠ Esa copia está vacía'); return; }
-    let msg = 'Se añadirán ' + plural(nG, 'gasto', 'gastos') + ' y ' + plural(nI, 'ingreso', 'ingresos') + '.';
+    if (!nG && !nI && !nF) { closeSettings(); toast(rep ? '✓ Esa copia no trae nada nuevo' : '⚠ Esa copia está vacía'); return; }
+    let msg = 'Se añadirán ' + plural(nG, 'gasto', 'gastos') + ' y ' + plural(nI, 'ingreso', 'ingresos')
+      + (nF ? ', y ' + plural(nF, 'fijo', 'fijos') : '') + '.';
     if (rep) msg += ' ' + (rep === 1 ? '1 ya lo tienes y se omite.' : rep + ' ya los tienes y se omiten.');
     if (inv) msg += ' ' + (inv === 1 ? '1 no se pudo leer.' : inv + ' no se pudieron leer.');
     pendingImport = plan;
@@ -1954,7 +2350,10 @@ function confirmImport() {
     }
     // Las metas de la copia solo se usan si aquí todavía no se guardó ninguna
     if (plan.pcts && !readSavedPcts()) localStorage.setItem(PCTS_KEY, JSON.stringify(plan.pcts));
+    // Los fijos que aún no tienes
+    if (plan.fijos.length) saveFixedList(readFixed().concat(plan.fijos.filter(f => !readFixed().some(x => x.id === f.id))));
   } catch (e) { toast('⚠ No se pudo guardar la copia'); return; }
+  runFixed();
   loadPcts();
   refreshAfterDataChange();
   toast('✓ ' + plural(plan.gastos.nuevos.length + plan.ingresos.nuevos.length, 'movimiento importado', 'movimientos importados'));
@@ -2229,12 +2628,16 @@ function openReview() {
   if (!cards.length) { closeReview(); return; }
   const statuses = loanStatuses();
   const openLoans = statuses.filter(x => x.remaining > 0).sort((a, b) => String(b.loan.date).localeCompare(String(a.loan.date)));
+  const fixed = readFixed();
+  const lists = { gastos: readList(DATA_KEYS.gastos), ingresos: readList(DATA_KEYS.ingresos) };
   document.getElementById('review-list').innerHTML =
     '<div class="sheet-note">Se anotaron solos a partir de los avisos de tu banco. Ponles nombre y categoría, o descártalos si no corresponden.</div>' +
     cards.map(card => {
       if (card.type === 'pair') return pairCardHtml(card.g, card.i);
       const { kind, e } = card;
       const income = kind === 'ingresos';
+      const fixedMatch = matchFixed(e, kind, fixed, lists);
+      if (fixedMatch) return fixedCardHtml(kind, e, fixedMatch);
       // Dinero que llega de alguien a quien le prestaste: se propone como devolución
       const suggested = income ? suggestLoanFor(e, statuses) : null;
       const cat = suggested ? REPAY_CAT : e.cat;
@@ -2301,6 +2704,16 @@ document.getElementById('review-list').addEventListener('click', ev => {
     return;
   }
   const kind = card.dataset.kind, id = Number(card.dataset.id);
+  if (card.classList.contains('rv-fixed')) {
+    if (ev.target.closest('.rv-isfixed')) {
+      const f = confirmFixedMatch(kind, id, Number(card.dataset.fixed), card.dataset.month);
+      finishReviewCard(card, f ? `✓ Anotado como tu fijo «${f.name}»` : '✓ Guardado');
+    } else if (ev.target.closest('.rv-notfixed')) {
+      updateStoredEntry(kind, id, e => ({ ...e, notFixed: true }));
+      openReview();
+    }
+    return;
+  }
   const loanChip = ev.target.closest('.loan-chip');
   if (loanChip) {
     card.dataset.loan = loanChip.dataset.loan;
@@ -2514,7 +2927,7 @@ if (Native) {
   document.getElementById('capture-section').style.display = '';
   Native.PaymentCapture.addListener('captured', () => syncCaptured());
   Native.PaymentCapture.addListener('openReview', () => openReviewFromAlert());
-  Native.App.addListener('resume', () => { refreshCaptureStatus(); syncCaptured(); });
+  Native.App.addListener('resume', () => { if (runFixed()) refreshAfterDataChange(); refreshCaptureStatus(); syncCaptured(); });
   // Al abrir: Android debe vigilar exactamente las apps elegidas aquí
   Native.PaymentCapture.setWatched({ packages: captureApps().map(a => a.pkg) }).catch(() => {})
     .then(() => { refreshCaptureStatus().then(maybeAskNotify); syncCaptured(); });
@@ -2522,6 +2935,7 @@ if (Native) {
 
 // ── INIT ─────────────────────────────────────────────
 document.getElementById('inp-date').value = todayISO();
+runFixed();
 loadPcts();
 applyMode();
 if(currentModeKey !== 'analisis') { load(); } else { updateAnPeriodUI(); }
