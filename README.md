@@ -29,9 +29,12 @@ Todo se guarda en `localStorage`:
 
 Las fechas se guardan como `AAAA-MM-DDT12:00:00` (mediodía, hora local).
 
+Modos (panel ⚙, se recuerdan en `app-mode`): Mis Gastos, Mis Ingresos, Mis Préstamos,
+Mis Fijos y Mis Análisis.
+
 Préstamos: un préstamo es un gasto con `cat: "Préstamo"`, y cada devolución es un ingreso con
 `cat: "Devolución"` y `loanId` (el `id` del préstamo). Ninguno de los dos se suma a los
-gastos ni a los ingresos; la pestaña «Préstamos» muestra cuánto falta de cada uno, y
+gastos ni a los ingresos; el modo «Mis Préstamos» muestra cuánto falta de cada uno, y
 «Tengo en la cuenta» (Análisis → Histórico) sí los incluye.
 
 Fijos: cada uno se anota solo una vez al mes, el día `day` (el 31 pasa al último día en

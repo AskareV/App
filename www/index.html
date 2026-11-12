@@ -45,7 +45,7 @@
 
     /* Tabs */
     .tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
-    .tab{flex:1;min-width:0;padding:11px 0;text-align:center;font-size:12.5px;white-space:nowrap;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;user-select:none}
+    .tab{flex:1;min-width:0;padding:11px 0;text-align:center;font-size:13px;white-space:nowrap;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;user-select:none}
     .tab.active{color:var(--accent-text);border-bottom-color:var(--accent)}
     .scroll{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:16px 16px 100px}
 
@@ -249,6 +249,14 @@
     .mode-card.gastos-active{border-color:#d4a847;background:#1c1609}
     .mode-card.ingresos-active{border-color:#4caf72;background:#091510}
     .mode-card.analisis-active{border-color:#a78bfa;background:#120f1f}
+    .mode-card.prestamos-active{border-color:#4a8fd4;background:#0d1622}
+    .mode-card.fijos-active{border-color:#38b2a3;background:#0a1a18}
+    .mode-card-compact{display:flex;align-items:center;gap:10px;padding:12px;text-align:left}
+    .mode-card-compact .mc-icon{font-size:22px;margin-bottom:0;flex-shrink:0}
+    .mode-card-compact .mc-text{flex:1;min-width:0}
+    .mode-card-compact .mc-name{font-size:13px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mode-card-compact .mc-desc{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #settings-modal .modal-box{max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain}
     .mode-card-wide{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:14px 16px;text-align:left}
     .mode-card-wide .mc-icon{font-size:24px;margin-bottom:0;flex-shrink:0}
     .mode-card-wide .mc-text{flex:1}
@@ -372,8 +380,6 @@
     <div class="tab active" onclick="showTab('add')" id="tab-add">+ Agregar</div>
     <div class="tab" onclick="showTab('list')" id="tab-list">Historial</div>
     <div class="tab" onclick="showTab('stats')" id="tab-stats">Resumen</div>
-    <div class="tab" onclick="showTab('loans')" id="tab-loans">Préstamos</div>
-    <div class="tab" onclick="showTab('fixed')" id="tab-fixed">Fijos</div>
   </div>
 
   <!-- Tabs análisis -->
@@ -609,6 +615,20 @@
         <div class="mc-name">Mis Ingresos</div>
         <div class="mc-desc">Registra entradas</div>
       </div>
+      <div class="mode-card mode-card-compact" id="mcard-prestamos" onclick="switchMode('prestamos')">
+        <div class="mc-icon">🤝</div>
+        <div class="mc-text">
+          <div class="mc-name">Mis Préstamos</div>
+          <div class="mc-desc">Lo que te deben</div>
+        </div>
+      </div>
+      <div class="mode-card mode-card-compact" id="mcard-fijos" onclick="switchMode('fijos')">
+        <div class="mc-icon">📌</div>
+        <div class="mc-text">
+          <div class="mc-name">Mis Fijos</div>
+          <div class="mc-desc">Lo de cada mes</div>
+        </div>
+      </div>
       <div class="mode-card mode-card-wide" id="mcard-analisis" onclick="switchMode('analisis')">
         <div class="mc-icon">📊</div>
         <div class="mc-text">
@@ -689,6 +709,35 @@
         <button class="btn-primary" id="fx-save" onclick="saveFixed()">Guardar</button>
       </div>
       <button class="fx-del" id="fx-delete" onclick="deleteFixed(this)">Eliminar este fijo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nuevo préstamo (desde Mis Préstamos) -->
+<div class="modal-overlay" id="loan-modal" onclick="closeLoanModal(event)">
+  <div class="modal-box">
+    <div class="modal-title">Nuevo préstamo</div>
+    <div class="modal-sub wrap">No se cuenta como gasto: el dinero sigue siendo tuyo.</div>
+    <div class="field">
+      <label>¿A quién le prestaste?</label>
+      <input type="text" id="loan-name" placeholder="Ej: Juan" maxlength="80" autocomplete="off">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Monto</label>
+        <div class="amount-wrap">
+          <span class="prefix">Bs.</span>
+          <input type="number" id="loan-amount" placeholder="0.00" inputmode="decimal" min="0" step="0.01">
+        </div>
+      </div>
+      <div class="field">
+        <label>Fecha</label>
+        <input type="date" id="loan-date">
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="modal-btn cancel" onclick="closeLoanModal()">Cancelar</button>
+      <button class="modal-btn accept" id="btn-loan-confirm" onclick="confirmLoan()">Guardar</button>
     </div>
   </div>
 </div>
@@ -809,6 +858,14 @@ const MODES = {
 };
 
 let currentModeKey = localStorage.getItem('app-mode') || 'gastos';
+if (!['gastos', 'ingresos', 'prestamos', 'fijos', 'analisis'].includes(currentModeKey)) currentModeKey = 'gastos';
+// Modos que no son una lista de movimientos: se eligen en el panel ⚙ igual que Gastos e Ingresos
+const VIEW_MODES = {
+  prestamos: { title: '🤝 Mis Préstamos', toast: '🤝 Mis Préstamos', view: 'view-loans', accent: '#4a8fd4', accentDim: '#101820', accentText: '#7ab3e8' },
+  fijos: { title: '📌 Mis Fijos', toast: '📌 Mis Fijos', view: 'view-fixed', accent: '#38b2a3', accentDim: '#0b1f1c', accentText: '#5fd3c4' },
+};
+// Gastos e Ingresos: los modos con formulario, historial y resumen
+function isListMode() { return currentModeKey === 'gastos' || currentModeKey === 'ingresos'; }
 let currentMode = MODES[currentModeKey];
 let expenses = [];
 let editingId = null;
@@ -927,10 +984,20 @@ function populateCsel(id, options, defaultVal) {
 // ── MODE ─────────────────────────────────────────────
 function applyMode() {
   const isAnalisis = currentModeKey === 'analisis';
-  document.getElementById('tabs-normal').style.display = isAnalisis ? 'none' : 'flex';
+  const view = VIEW_MODES[currentModeKey];
+  document.getElementById('tabs-normal').style.display = isListMode() ? 'flex' : 'none';
   document.getElementById('tabs-analisis').style.display = isAnalisis ? 'flex' : 'none';
 
-  if (isAnalisis) {
+  if (view) {
+    document.documentElement.style.setProperty('--accent', view.accent);
+    document.documentElement.style.setProperty('--accent-dim', view.accentDim);
+    document.documentElement.style.setProperty('--accent-text', view.accentText);
+    document.getElementById('topbar-title').textContent = view.title;
+    hideAllViews();
+    document.getElementById(view.view).style.display = 'block';
+    if (currentModeKey === 'prestamos') renderLoans(); else renderFixed();
+    updateAll();
+  } else if (isAnalisis) {
     document.documentElement.style.setProperty('--accent','#a78bfa');
     document.documentElement.style.setProperty('--accent-dim','#12102a');
     document.documentElement.style.setProperty('--accent-text','#c4b5fd');
@@ -962,13 +1029,15 @@ function applyMode() {
   document.getElementById('mcard-gastos').className = 'mode-card'+(currentModeKey==='gastos'?' gastos-active':'');
   document.getElementById('mcard-ingresos').className = 'mode-card'+(currentModeKey==='ingresos'?' ingresos-active':'');
   document.getElementById('mcard-analisis').className = 'mode-card mode-card-wide'+(currentModeKey==='analisis'?' analisis-active':'');
+  document.getElementById('mcard-prestamos').className = 'mode-card mode-card-compact'+(currentModeKey==='prestamos'?' prestamos-active':'');
+  document.getElementById('mcard-fijos').className = 'mode-card mode-card-compact'+(currentModeKey==='fijos'?' fijos-active':'');
 }
 
 function hideAllViews() {
   ['view-add','view-list','view-stats','view-loans','view-fixed','view-analisis-config','view-analisis-chart','view-analisis-hist'].forEach(id => {
     document.getElementById(id).style.display = 'none';
   });
-  ['tab-add','tab-list','tab-stats','tab-loans','tab-fixed'].forEach(id => {
+  ['tab-add','tab-list','tab-stats'].forEach(id => {
     const el = document.getElementById(id); if(el) el.classList.remove('active');
   });
 }
@@ -993,8 +1062,8 @@ function switchMode(modeKey) {
   localStorage.setItem('app-mode', modeKey);
   activeFilter = '';
   applyMode();
-  if(modeKey !== 'analisis') { load(); showTab('add'); }
-  toast(modeKey==='gastos'?'💰 Mis Gastos': modeKey==='ingresos'?'📈 Mis Ingresos':'📊 Mis Análisis');
+  if(isListMode()) { load(); showTab('add'); }
+  toast(modeKey==='gastos'?'💰 Mis Gastos': modeKey==='ingresos'?'📈 Mis Ingresos': VIEW_MODES[modeKey]?VIEW_MODES[modeKey].toast:'📊 Mis Análisis');
 }
 
 // ── ANALISIS TABS ────────────────────────────────────
@@ -1387,8 +1456,6 @@ function showTab(tab) {
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='list') renderList();
   if(tab==='stats') renderStats();
-  if(tab==='loans') renderLoans();
-  if(tab==='fixed') renderFixed();
 }
 
 // ── FORM ─────────────────────────────────────────────
@@ -1494,6 +1561,18 @@ function closeModal(e){
 // ── TOP BAR ──────────────────────────────────────────
 function updateAll(){
   if(currentModeKey==='analisis') return;
+  const sub=document.getElementById('topbar-sub');
+  if(currentModeKey==='prestamos'){
+    const open=loanStatuses().filter(x=>x.remaining>0);
+    sub.textContent=open.length?`Te deben ${fmtMoney(open.reduce((s,x)=>s+x.remaining,0))} · ${open.length} sin devolver`:'Nadie te debe nada';
+    return;
+  }
+  if(currentModeKey==='fijos'){
+    const fixed=readFixed(), cur=monthKeyOf(new Date());
+    const sum=k=>fixed.filter(f=>f.kind===k&&f.start<=cur).reduce((s,f)=>s+amountFor(f,cur),0);
+    sub.textContent=fixed.length?`Cada mes: +${fmtMoney(sum('ingresos'))} · −${fmtMoney(sum('gastos'))}`:'Lo que se repite cada mes';
+    return;
+  }
   const now=new Date();
   const monthData=expenses.filter(e=>{const d=new Date(e.date);return !isLoanFlow(e)&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
   const total=monthData.reduce((s,e)=>s+e.amount,0);
@@ -1547,8 +1626,6 @@ function resetPeriod(){const now=new Date();selYear=now.getFullYear();selMonth=n
 function refreshCurrentTab(){
   if(document.getElementById('view-list').style.display!=='none') renderList();
   if(document.getElementById('view-stats').style.display!=='none') renderStats();
-  if(document.getElementById('view-loans').style.display!=='none') renderLoans();
-  if(document.getElementById('view-fixed').style.display!=='none') renderFixed();
 }
 
 // ── STATS ─────────────────────────────────────────────
@@ -1582,7 +1659,7 @@ function renderStats(){
   const el=document.getElementById('cat-breakdown');
   const apartTotal=apart.reduce((s,e)=>s+e.amount,0);
   const note=apart.length?`<div class="loan-note">${currentModeKey==='gastos'
-    ?`🤝 Prestaste ${fmtMoney(apartTotal)} en este período. No se cuenta como gasto: lo ves en «Préstamos».`
+    ?`🤝 Prestaste ${fmtMoney(apartTotal)} en este período. No se cuenta como gasto: lo ves en ⚙ → «Mis Préstamos».`
     :`↩️ Te devolvieron ${fmtMoney(apartTotal)} en este período. No se cuenta como ingreso: se descuenta de lo que te deben.`}</div>`:'';
   if(!sorted.length){el.innerHTML=note+`<div class="empty"><div class="icon">📊</div><p>Sin ${currentMode.nounPlural} en este período.</p></div>`;return;}
   el.innerHTML=note+sorted.map(([cat,amt])=>{
@@ -1697,7 +1774,7 @@ function onCatChange(selectedLoanId) {
   document.getElementById('loan-field').style.display = isRepay ? '' : 'none';
   if (isRepay) fillLoanOptions(selectedLoanId);
   let text = '';
-  if (isLoan) text = '🤝 No se cuenta como gasto: el dinero sigue siendo tuyo. Queda en «Préstamos» hasta que te lo devuelvan. En el detalle, pon a quién le prestaste.';
+  if (isLoan) text = '🤝 No se cuenta como gasto: el dinero sigue siendo tuyo. Queda en ⚙ → «Mis Préstamos» hasta que te lo devuelvan. En el detalle, pon a quién le prestaste.';
   else if (isRepay) text = cselState['inp-loan'].options.length
     ? '↩️ No se cuenta como ingreso: es tu dinero que vuelve. Se descuenta de lo que te deben.'
     : '↩️ No tienes préstamos pendientes. Primero anota el préstamo como gasto, con la categoría «Préstamo».';
@@ -1731,12 +1808,13 @@ function onLoanPicked() {
   if (x && !amount.value && x.remaining > 0) amount.value = x.remaining;
 }
 
-// ── Pestaña «Préstamos» ──
+// ── Mis Préstamos ──
 function renderLoans() {
   const el = document.getElementById('loans-content');
   const all = loanStatuses();
+  const addBtn = '<button class="fx-add" style="margin:0 0 14px" onclick="openLoanModal()">+ Nuevo préstamo</button>';
   if (!all.length) {
-    el.innerHTML = '<div class="empty"><div class="icon">🤝</div><p>No tienes préstamos registrados.<br>Cuando prestes dinero, anótalo como gasto con la categoría «Préstamo»: no se cuenta como gasto y aparece aquí hasta que te lo devuelvan.</p></div>';
+    el.innerHTML = addBtn + '<div class="empty"><div class="icon">🤝</div><p>No tienes préstamos registrados.<br>Cuando prestes dinero, anótalo aquí (o en Mis Gastos con la categoría «Préstamo»): no se cuenta como gasto y aparece aquí hasta que te lo devuelvan.</p></div>';
     return;
   }
   const byDateDesc = (a, b) => String(b.loan.date).localeCompare(String(a.loan.date)) || b.loan.id - a.loan.id;
@@ -1771,6 +1849,7 @@ function renderLoans() {
         <div class="loan-sub">${open.length ? plural(open.length, 'préstamo sin devolver', 'préstamos sin devolver') : 'Todos tus préstamos están devueltos'} · no se cuentan como gasto</div>
       </div>
     </div>
+    ${addBtn}
     ${open.map(x => card(x, false)).join('')}
     ${closed.length ? `<div class="breakdown-lbl" style="margin-top:18px">Devueltos</div>${closed.map(x => card(x, true)).join('')}` : ''}`;
 }
@@ -1779,7 +1858,32 @@ document.getElementById('loans-content').addEventListener('click', ev => {
   if (btn) openRepay(Number(btn.dataset.loan));
 });
 
-// ── Registrar una devolución desde la pestaña ──
+// ── Nuevo préstamo desde Mis Préstamos (se guarda como gasto con la categoría «Préstamo») ──
+function openLoanModal() {
+  document.getElementById('loan-name').value = '';
+  document.getElementById('loan-amount').value = '';
+  document.getElementById('loan-date').value = todayISO();
+  document.getElementById('loan-modal').classList.add('show');
+}
+function closeLoanModal(e) {
+  if (e && e.target !== document.getElementById('loan-modal')) return;
+  document.getElementById('loan-modal').classList.remove('show');
+}
+function confirmLoan() {
+  const name = document.getElementById('loan-name').value.trim();
+  const amount = parseFloat(document.getElementById('loan-amount').value);
+  if (!name) { toast('⚠ Escribe a quién le prestaste'); return; }
+  if (!amount || amount <= 0) { toast('⚠ Ingresa un monto válido'); return; }
+  const day = document.getElementById('loan-date').value || todayISO();
+  const gastos = readList(DATA_KEYS.gastos);
+  gastos.unshift({ id: newEntryId(gastos), amount, detail: name, cat: LOAN_CAT, date: day + 'T12:00:00' });
+  localStorage.setItem(DATA_KEYS.gastos, JSON.stringify(gastos));
+  closeLoanModal();
+  refreshAfterDataChange();
+  toast('✓ Préstamo registrado');
+}
+
+// ── Registrar una devolución desde Mis Préstamos ──
 let repayLoanId = null;
 function openRepay(loanId) {
   const x = loanStatuses().find(s => s.loan.id === loanId);
@@ -1922,18 +2026,14 @@ function planFixed(existing, incoming) {
   return out;
 }
 
-// ── Pestaña «Fijos» ──
-function fixedKindOfMode() { return currentModeKey === 'ingresos' ? 'ingresos' : 'gastos'; }
+// ── Mis Fijos ──
 function renderFixed() {
   const el = document.getElementById('fixed-content');
   const fixed = readFixed();
-  const kind = fixedKindOfMode();
   const cur = monthKeyOf(new Date());
   const monthly = k => fixed.filter(f => f.kind === k && f.start <= cur).reduce((s, f) => s + amountFor(f, cur), 0);
   const inc = monthly('ingresos'), out = monthly('gastos');
-  const list = readList(DATA_KEYS[kind]);
-  const mine = fixed.filter(f => f.kind === kind).sort((a, b) => a.day - b.day || a.name.localeCompare(b.name));
-  const noun = kind === 'gastos' ? 'gasto' : 'ingreso';
+  const lists = { gastos: readList(DATA_KEYS.gastos), ingresos: readList(DATA_KEYS.ingresos) };
 
   const summary = fixed.length ? `<div class="an-section">
       <div class="an-section-title">Cada mes (${monthName(cur)})</div>
@@ -1945,6 +2045,7 @@ function renderFixed() {
     </div>` : '';
 
   const card = f => {
+    const kind = f.kind, list = lists[kind];
     const meta = MODES[kind].cats[f.cat] || { icon: '📌', bg: '#181818' };
     // Un cambio de monto ya programado (no el monto con el que empieza)
     const next = f.start <= cur ? f.amounts.find(x => x.from > cur) : null;
@@ -1962,21 +2063,25 @@ function renderFixed() {
           <div class="item-meta"><span class="item-cat">${esc(f.cat)}</span><div class="item-dot"></div><span class="item-date">día ${f.day}</span></div>
           ${next ? `<div class="fx-hist">Desde ${monthName(next.from)}: ${fmtMoney(next.amount)}</div>` : ''}
         </div>
-        <div class="item-amount">${fmtMoney(amountFor(f, cur))}</div>
+        <div class="item-amount" style="color:${kind === 'ingresos' ? '#6fcf8a' : '#f5c842'}">${fmtMoney(amountFor(f, cur))}</div>
       </div>
       <div class="fx-state">${state}</div>
     </div>`;
   };
 
-  el.innerHTML = summary
-    + (mine.length
-      ? `<div class="breakdown-lbl" style="margin-top:4px">${kind === 'gastos' ? 'Gastos fijos' : 'Ingresos fijos'}</div>${mine.map(card).join('')}`
-      : `<div class="empty"><div class="icon">📌</div><p>${kind === 'gastos'
-        ? 'Aún no tienes gastos fijos.<br>Anota aquí lo que se repite cada mes, como el presupuesto del micro o el alquiler: se suma solo el día que elijas, sin recordatorios.'
-        : 'Aún no tienes ingresos fijos.<br>Anota aquí lo que recibes cada mes, como tu sueldo: se suma solo el día que elijas.'}</p></div>`)
-    + `<button class="fx-add" onclick="openFixedSheet()">+ Agregar ${noun} fijo</button>`;
+  const section = kind => {
+    const mine = fixed.filter(f => f.kind === kind).sort((a, b) => a.day - b.day || a.name.localeCompare(b.name));
+    const noun = kind === 'gastos' ? 'gasto' : 'ingreso';
+    return `<div class="breakdown-lbl" style="margin-top:16px">${kind === 'gastos' ? 'Gastos fijos' : 'Ingresos fijos'}</div>
+      ${mine.map(card).join('')}
+      <button class="fx-add" data-add="${kind}">+ Agregar ${noun} fijo</button>`;
+  };
+  const intro = fixed.length ? '' : `<div class="empty" style="padding:28px 16px 8px"><div class="icon">📌</div><p>Anota aquí lo que se repite cada mes: tu sueldo, el presupuesto del micro, el alquiler…<br>Se suma solo el día que elijas, sin recordatorios.</p></div>`;
+  el.innerHTML = intro + summary + section('ingresos') + section('gastos');
 }
 document.getElementById('fixed-content').addEventListener('click', ev => {
+  const add = ev.target.closest('[data-add]');
+  if (add) { openFixedSheet(null, add.dataset.add); return; }
   const card = ev.target.closest('.fx-card');
   if (card) openFixedSheet(Number(card.dataset.fixed));
 });
@@ -1984,9 +2089,9 @@ document.getElementById('fixed-content').addEventListener('click', ev => {
 // ── Crear o editar un fijo ──
 let fixedEditing = null, fixedSheetKind = 'gastos', fixedCat = null, fixedFrom = 'cur';
 function fixedCats(kind) { return Object.keys(MODES[kind].cats).filter(c => c !== LOAN_CAT && c !== REPAY_CAT); }
-function openFixedSheet(id) {
+function openFixedSheet(id, kindForNew) {
   const f = id != null ? readFixed().find(x => x.id === id) : null;
-  const kind = f ? f.kind : fixedKindOfMode();
+  const kind = f ? f.kind : (kindForNew === 'ingresos' ? 'ingresos' : 'gastos');
   const cur = monthKeyOf(new Date());
   fixedEditing = f ? f.id : null;
   fixedSheetKind = kind;
@@ -2176,12 +2281,14 @@ function handleBack() {
   if (isShown('import-modal')) { closeImportModal(); return true; }
   if (isShown('del-modal')) { closeModal(); return true; }
   if (isShown('repay-modal')) { closeRepay(); return true; }
+  if (isShown('loan-modal')) { closeLoanModal(); return true; }
   if (isShown('fixed-sheet')) { closeFixedSheet(); return true; }
   if (isShown('settings-modal')) { closeSettings(); return true; }
   if (currentModeKey === 'analisis') {
     if (!isVisible('view-analisis-config')) { showAnTab('config'); return true; }
     return false;
   }
+  if (!isListMode()) return false;
   if (editingId !== null) { cancelEdit(); showTab('list'); return true; }
   if (!isVisible('view-add')) { showTab('add'); return true; }
   return false;
@@ -2364,6 +2471,10 @@ function refreshAfterDataChange() {
   if (currentModeKey === 'analisis') {
     if (isVisible('view-analisis-chart')) renderChart();
     if (isVisible('view-analisis-hist')) renderHistorico();
+  } else if (currentModeKey === 'prestamos') {
+    renderLoans(); updateAll();
+  } else if (currentModeKey === 'fijos') {
+    renderFixed(); updateAll();
   } else {
     load();
     refreshCurrentTab();
@@ -2938,7 +3049,7 @@ document.getElementById('inp-date').value = todayISO();
 runFixed();
 loadPcts();
 applyMode();
-if(currentModeKey !== 'analisis') { load(); } else { updateAnPeriodUI(); }
+if(isListMode()) { load(); } else if(currentModeKey === 'analisis') { updateAnPeriodUI(); }
 updatePeriodUI();
 updateReviewBar();
 

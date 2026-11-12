@@ -88,6 +88,8 @@ async function main() {
   }
 
   const listItems = (page) => page.$$eval('#list .item-detail', (els) => els.map((e) => e.textContent));
+  // Cambia de modo como lo hace la persona: ⚙ y la tarjeta del modo
+  const goMode = async (page, mode) => { await page.click('#gear-btn'); await page.click('#mcard-' + mode); };
   const stored = (page, key) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || 'null'), key);
   const toastText = (page) => page.textContent('#toast');
   // Espera a que aparezca un aviso con ese texto (leer un archivo no es instantáneo)
@@ -820,9 +822,9 @@ async function main() {
 
   await test('un gasto fijo se anota solo y aparece en «Fijos»', async (open) => {
     const { page } = await open();
-    await page.click('#tab-fixed');
-    assert.match(await page.textContent('#fixed-content'), /Aún no tienes gastos fijos/);
-    await page.click('#fixed-content .fx-add');
+    await goMode(page, 'fijos');
+    assert.match(await page.textContent('#fixed-content'), /Anota aquí lo que se repite cada mes/);
+    await page.click('#fixed-content [data-add="gastos"]');
     assert.strictEqual(await page.textContent('#fixed-sheet-title'), 'Nuevo gasto fijo');
     // Préstamo no es una categoría para un fijo
     assert.strictEqual(await page.locator('#fx-cats .chip:has-text("Préstamo")').count(), 0);
@@ -834,11 +836,13 @@ async function main() {
     await expectToast(page, /Gasto fijo guardado · anotado en noviembre/);
     const g = (await stored(page, 'gastos-app-v1'))[0];
     assert.deepStrictEqual([g.amount, g.detail, g.cat, g.date, g.fixedMonth, g.fixedAuto], [120, 'Micro', 'Transporte', '2026-11-01T12:00:00', '2026-11', true]);
-    assert.match(await page.textContent('#topbar-sub'), /1 gastos en Noviembre · Bs\. 120,00/);
     const text = (await page.innerText('#fixed-content')).replace(/\s+/g, ' ');
     assert.match(text, /Gastos fijos −Bs\. 120,00/);
     assert.match(text, /Quedan −Bs\. 120,00/);
     assert.match(text, /Micro Transporte día 1 Bs\. 120,00 ✓ Anotado el 01\/11\/2026/);
+    // En Mis Gastos cuenta como un gasto más, con la etiqueta «Fijo»
+    await goMode(page, 'gastos');
+    assert.match(await page.textContent('#topbar-sub'), /1 gastos en Noviembre · Bs\. 120,00/);
     await page.click('#tab-list');
     assert.match(await page.textContent('#list'), /Fijo/);
   });
@@ -847,7 +851,7 @@ async function main() {
     const seed = { 'app-mode': 'ingresos', 'fijos-app-v1': [fijo(7, 'ingresos', 'Sueldo', 'Sueldos', 30, '2026-11', [['2026-11', 2880.57]])] };
     const a = await open({ seed });
     assert.strictEqual(await stored(a.page, 'ingresos-app-v1'), null);
-    await a.page.click('#tab-fixed');
+    await goMode(a.page, 'fijos');
     assert.match(await a.page.textContent('#fixed-content'), /Se anota el 30 de noviembre/);
     const b = await open({ seed, now: '2026-11-30T08:00:00-04:00' });
     assert.deepStrictEqual(fixedOf(await stored(b.page, 'ingresos-app-v1'), 7), [['2026-11', 2880.57, '2026-11-30']]);
@@ -880,7 +884,7 @@ async function main() {
 
   await test('un aumento de sueldo desde el próximo mes no cambia los meses anteriores', async (open) => {
     const a = await open({ seed: conSueldo });
-    await a.page.click('#tab-fixed');
+    await goMode(a.page, 'fijos');
     await a.page.click('#fixed-content .fx-card');
     assert.strictEqual(await a.page.isVisible('#fx-from-field'), false);
     await a.page.fill('#fx-amount', '3100');
@@ -898,7 +902,7 @@ async function main() {
 
   await test('un cambio de monto desde este mes actualiza el de este mes', async (open) => {
     const { page } = await open({ seed: conSueldo });
-    await page.click('#tab-fixed');
+    await goMode(page, 'fijos');
     await page.click('#fixed-content .fx-card');
     await page.fill('#fx-amount', '3100');
     assert.match(await page.textContent('#fx-note'), /El de noviembre, si ya se anotó, pasa al nuevo monto/);
@@ -913,13 +917,13 @@ async function main() {
     await page.click('#del-modal .modal-btn.confirm');
     await page.reload();
     assert.deepStrictEqual(await stored(page, 'gastos-app-v1'), []);
-    await page.click('#tab-fixed');
+    await goMode(page, 'fijos');
     assert.match(await page.textContent('#fixed-content'), /Este mes no se cuenta/);
   });
 
   await test('eliminar un fijo deja los meses anotados y no anota más', async (open) => {
     const a = await open({ seed: { 'fijos-app-v1': [fijo(7, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]])] } });
-    await a.page.click('#tab-fixed');
+    await goMode(a.page, 'fijos');
     await a.page.click('#fixed-content .fx-card');
     await a.page.click('#fx-delete');
     assert.deepStrictEqual(await stored(a.page, 'fijos-app-v1') && (await stored(a.page, 'fijos-app-v1')).length, 1);
@@ -952,7 +956,7 @@ async function main() {
     assert.strictEqual(ingresos.length, 1);
     assert.deepStrictEqual([ingresos[0].detail, ingresos[0].cat, ingresos[0].fixedMonth, 'pending' in ingresos[0], 'fixedAuto' in ingresos[0]], ['Sueldo', 'Sueldos', '2026-11', false, false]);
     assert.match(await page.textContent('#topbar-sub'), /1 ingresos en Noviembre · Bs\. 2\.880,57/);
-    await page.click('#tab-fixed');
+    await goMode(page, 'fijos');
     assert.match(await page.textContent('#fixed-content'), /con el aviso del banco/);
   });
 
@@ -990,7 +994,7 @@ async function main() {
       fijo(8, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]]),
       fijo(9, 'gastos', 'Alquiler', 'Hogar', 5, '2026-12', [['2026-12', 1500]]),
     ] } });
-    await page.click('#tab-fixed');
+    await goMode(page, 'fijos');
     const text = (await page.innerText('#fixed-content')).replace(/\s+/g, ' ');
     assert.match(text, /Ingresos fijos \+Bs\. 2\.880,57 Gastos fijos −Bs\. 120,00 Quedan Bs\. 2\.760,57/);
     assert.match(text, /Alquiler Hogar día 5 Bs\. 1\.500,00 Empieza en diciembre/);
@@ -1013,18 +1017,52 @@ async function main() {
   await test('el botón atrás cierra la hoja de fijos', async (open) => {
     const { page } = await open({ native: true });
     await page.waitForFunction(() => !!window.__native.listeners['App:backButton']);
-    await page.click('#tab-fixed');
-    await page.click('#fixed-content .fx-add');
+    await goMode(page, 'fijos');
+    await page.click('#fixed-content [data-add="ingresos"]');
+    assert.strictEqual(await page.textContent('#fixed-sheet-title'), 'Nuevo ingreso fijo');
     await pressBack(page);
     assert.strictEqual(await page.locator('#fixed-sheet.show').count(), 0);
   });
 
-  await test('las cinco pestañas caben en un teléfono angosto', async (open) => {
+  await test('Mis Préstamos y Mis Fijos están en el panel, no como pestañas', async (open) => {
     const { page } = await open();
-    await page.setViewportSize({ width: 360, height: 740 });
-    const fits = await page.evaluate(() => [...document.querySelectorAll('#tabs-normal .tab')].every((t) => t.scrollWidth <= t.clientWidth + 1)
-      && document.documentElement.scrollWidth <= 360);
-    assert.strictEqual(fits, true);
+    assert.deepStrictEqual(await page.$$eval('#tabs-normal .tab', (els) => els.map((e) => e.textContent.trim())), ['+ Agregar', 'Historial', 'Resumen']);
+    await goMode(page, 'prestamos');
+    assert.strictEqual(await page.textContent('#topbar-title'), '🤝 Mis Préstamos');
+    assert.strictEqual(await page.isVisible('#tabs-normal'), false);
+    assert.strictEqual(await page.isVisible('#view-loans'), true);
+    await goMode(page, 'fijos');
+    assert.strictEqual(await page.textContent('#topbar-title'), '📌 Mis Fijos');
+    assert.strictEqual(await page.isVisible('#view-fixed'), true);
+    assert.strictEqual(await page.isVisible('#view-loans'), false);
+    // El modo se recuerda al volver a abrir la app
+    await page.reload();
+    assert.strictEqual(await page.textContent('#topbar-title'), '📌 Mis Fijos');
+    assert.strictEqual(await page.isVisible('#view-fixed'), true);
+    // De vuelta a Mis Gastos, con sus tres pestañas
+    await goMode(page, 'gastos');
+    assert.strictEqual(await page.isVisible('#view-add'), true);
+  });
+
+  await test('el panel de modos cabe en una pantalla chica (se desplaza si hace falta)', async (open) => {
+    const { page } = await open();
+    await page.setViewportSize({ width: 360, height: 600 });
+    await page.click('#gear-btn');
+    const box = await page.$eval('#settings-modal .modal-box', (b) => ({ top: b.getBoundingClientRect().top, scroll: b.scrollHeight > b.clientHeight }));
+    assert.ok(box.top >= 0, 'el panel no se sale por arriba');
+    await page.click('#mcard-fijos');
+    assert.strictEqual(await page.textContent('#topbar-title'), '📌 Mis Fijos');
+  });
+
+  await test('Mis Fijos: el resumen arriba muestra lo de cada mes', async (open) => {
+    const { page } = await open({ seed: { 'fijos-app-v1': [
+      fijo(7, 'ingresos', 'Sueldo', 'Sueldos', 30, '2026-11', [['2026-11', 2880.57]]),
+      fijo(8, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]]),
+    ] } });
+    await goMode(page, 'fijos');
+    assert.strictEqual(await page.textContent('#topbar-sub'), 'Cada mes: +Bs. 2.880,57 · −Bs. 120,00');
+    const text = (await page.innerText('#fixed-content')).replace(/\s+/g, ' ');
+    assert.match(text, /INGRESOS FIJOS 💼 Sueldo .* \+ Agregar ingreso fijo GASTOS FIJOS 🚌 Micro .* \+ Agregar gasto fijo/);
   });
 
   console.log('Préstamos');
@@ -1047,11 +1085,13 @@ async function main() {
     assert.strictEqual(await page.textContent('#s-count'), '1');
     assert.match(await page.textContent('#cat-breakdown'), /Prestaste Bs\. 500,00 en este período/);
     assert.doesNotMatch(await page.textContent('#cat-breakdown'), /🤝\s*Préstamo\s*\d/);
-    await page.click('#tab-loans');
+    await goMode(page, 'prestamos');
     assert.strictEqual(await page.textContent('#loans-content .stat-card .val'), 'Bs. 500,00');
     const [card] = await loanCards(page);
     assert.match(card, /Préstamo a Juan/);
     assert.match(card, /Bs\. 500,00 falta/i);
+    assert.match(await page.textContent('#topbar-sub'), /Te deben Bs\. 500,00 · 1 sin devolver/);
+    await goMode(page, 'gastos');
     await page.click('#tab-list');
     assert.match(await page.textContent('#list'), /Te deben Bs\. 500,00/);
   });
@@ -1089,7 +1129,7 @@ async function main() {
     assert.match(await page.textContent('#topbar-sub'), /0 ingresos en Noviembre · Bs\. 0,00/);
     await page.click('#tab-list');
     assert.match(await page.textContent('#list'), /De: Préstamo a Juan/);
-    await page.click('#tab-loans');
+    await goMode(page, 'prestamos');
     assert.match((await loanCards(page))[0], /Bs\. 300,00 falta/i);
   });
 
@@ -1113,7 +1153,7 @@ async function main() {
 
   await test('«Me devolvieron» en la pestaña registra la devolución y salda el préstamo', async (open) => {
     const { page } = await open({ seed: conPrestamo });
-    await page.click('#tab-loans');
+    await goMode(page, 'prestamos');
     await page.click('#loans-content .loan-card >> text=Me devolvieron');
     assert.strictEqual(await page.inputValue('#repay-amount'), '500');
     await page.fill('#repay-amount', '150');
@@ -1202,7 +1242,7 @@ async function main() {
     await expectToast(page, /Guardado como préstamo/);
     const [g] = await stored(page, 'gastos-app-v1');
     assert.deepStrictEqual([g.cat, g.detail, 'pending' in g], ['Préstamo', 'Préstamo a Pedro', false]);
-    await page.click('#tab-loans');
+    await goMode(page, 'prestamos');
     assert.match((await loanCards(page))[0], /Préstamo a Pedro/);
   });
 
@@ -1221,7 +1261,7 @@ async function main() {
     await expectToast(page, /Guardado como devolución/);
     const [r] = await stored(page, 'ingresos-app-v1');
     assert.deepStrictEqual([r.cat, r.loanId], ['Devolución', 1]);
-    await page.click('#tab-loans');
+    await goMode(page, 'prestamos');
     assert.match(await page.textContent('#loans-content .stat-card .val'), /Bs\. 100,00/);
   });
 
@@ -1251,19 +1291,38 @@ async function main() {
     await importFile(b.page, data);
     await importSummary(b.page);
     await b.page.click('#btn-import-confirm');
-    await b.page.click('#tab-loans');
+    await goMode(b.page, 'prestamos');
     assert.match((await loanCards(b.page))[0], /Bs\. 300,00 falta/i);
+  });
+
+  await test('«+ Nuevo préstamo» en Mis Préstamos lo guarda como préstamo', async (open) => {
+    const { page } = await open();
+    await goMode(page, 'prestamos');
+    assert.strictEqual(await page.textContent('#topbar-sub'), 'Nadie te debe nada');
+    await page.click('#loans-content .fx-add');
+    await page.click('#btn-loan-confirm');
+    await expectToast(page, /Escribe a quién le prestaste/);
+    await page.fill('#loan-name', 'Carla');
+    await page.fill('#loan-amount', '250');
+    await page.click('#btn-loan-confirm');
+    await expectToast(page, /Préstamo registrado/);
+    const [g] = await stored(page, 'gastos-app-v1');
+    assert.deepStrictEqual([g.detail, g.amount, g.cat, g.date], ['Carla', 250, 'Préstamo', '2026-11-11T12:00:00']);
+    assert.match((await loanCards(page))[0], /Carla/);
+    assert.strictEqual(await page.textContent('#topbar-sub'), 'Te deben Bs. 250,00 · 1 sin devolver');
   });
 
   await test('el botón atrás cierra la ventana de devolución', async (open) => {
     const { page } = await open({ seed: conPrestamo, native: true });
     await page.waitForFunction(() => !!window.__native.listeners['App:backButton']);
-    await page.click('#tab-loans');
+    await goMode(page, 'prestamos');
     await page.click('#loans-content .loan-card >> text=Me devolvieron');
     await pressBack(page);
     assert.strictEqual(await page.locator('#repay-modal.show').count(), 0);
+    assert.strictEqual((await nativeCalls(page, 'App', 'minimizeApp')).length, 0);
+    // Sin nada abierto, atrás deja la app en segundo plano (como en los demás modos)
     await pressBack(page);
-    assert.strictEqual(await page.locator('#view-add').isVisible(), true);
+    assert.strictEqual((await nativeCalls(page, 'App', 'minimizeApp')).length, 1);
   });
 
   await browser.close();
