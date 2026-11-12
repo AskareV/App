@@ -48,6 +48,13 @@ public class PaymentCapturePlugin extends Plugin {
         requestRebindIfEnabled();
     }
 
+    @Override
+    protected void handleOnDestroy() {
+        super.handleOnDestroy();
+        // La pantalla se cerró: los avisos nuevos se recogerán cuando se vuelva a abrir
+        if (current.get() == this) current = new WeakReference<>(null);
+    }
+
     /** Lo llama el servicio cuando captura un aviso, por si la app está abierta en ese momento. */
     static void notifyCaptured() {
         PaymentCapturePlugin plugin = current.get();

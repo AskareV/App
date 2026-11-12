@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Genera el APK de Mis Finanzas a partir de la carpeta www/.
-# Resultado: dist/MisFinanzas-debug.apk
+# Genera el APK de Mis Finanzas a partir de la carpeta www/ (y un .zip con la versión web).
+#
+# - Si existe android/keystore.properties (con la llave propia), genera el APK
+#   firmado de "release": dist/MisFinanzas.apk. Es el que conviene instalar,
+#   porque las versiones siguientes se instalan encima sin perder datos.
+# - Si no, genera uno de prueba con la llave de depuración de esta máquina:
+#   dist/MisFinanzas-debug.apk.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,7 +26,17 @@ npx cap sync android
 # Versión visible en Ajustes: nombre de package.json y un número que sube con cada cambio
 VERSION_NAME="$(node -p "require('./package.json').version")"
 VERSION_CODE="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
-GRADLE_ARGS=(assembleDebug --console=plain "-PappVersionName=$VERSION_NAME" "-PappVersionCode=$VERSION_CODE")
+
+if [ -f android/keystore.properties ]; then
+  TASK=assembleRelease
+  SRC=android/app/build/outputs/apk/release/app-release.apk
+  DEST=dist/MisFinanzas.apk
+else
+  TASK=assembleDebug
+  SRC=android/app/build/outputs/apk/debug/app-debug.apk
+  DEST=dist/MisFinanzas-debug.apk
+fi
+GRADLE_ARGS=("$TASK" --console=plain "-PappVersionName=$VERSION_NAME" "-PappVersionCode=$VERSION_CODE")
 
 # Usa el Gradle instalado si lo hay; si no, el del proyecto
 if command -v gradle >/dev/null 2>&1; then
@@ -31,5 +46,10 @@ else
 fi
 
 mkdir -p dist
-cp android/app/build/outputs/apk/debug/app-debug.apk dist/MisFinanzas-debug.apk
-echo "Listo: dist/MisFinanzas-debug.apk (versión $VERSION_NAME, compilación $VERSION_CODE)"
+cp "$SRC" "$DEST"
+echo "Listo: $DEST (versión $VERSION_NAME, compilación $VERSION_CODE)"
+
+# La misma app como sitio web (para Netlify): el contenido de www/ en un .zip
+rm -f dist/MisFinanzas-web.zip
+(cd www && zip -qr ../dist/MisFinanzas-web.zip . -x '.*')
+echo "Listo: dist/MisFinanzas-web.zip (versión web)"

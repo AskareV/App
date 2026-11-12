@@ -1,8 +1,12 @@
 // Genera los iconos de la app (PNG por densidad) a partir de un dibujo SVG.
-// Uso: node make-icons.js <carpeta res de Android> <fuente woff2> [carpeta de vista previa]
+// Uso: node make-icons.js <carpeta res de Android> <fuente woff2> [--web <carpeta>] [--preview <carpeta>]
+//   --web      además genera los iconos de la versión web (icon-192, icon-512, icon-maskable-512)
+//   --preview  guarda una vista previa del icono recortado en círculo y en cuadrado
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
-const RES = process.argv[2], FONT = process.argv[3], PREVIEW = process.argv[4];
+const RES = process.argv[2], FONT = process.argv[3];
+const flag = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
+const WEB = flag('--web'), PREVIEW = flag('--preview');
 
 const BG = '#151515';
 const fontB64 = fs.readFileSync(FONT).toString('base64');
@@ -49,6 +53,24 @@ const DENSITIES = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
       await page.evaluate(() => document.fonts.ready);
       const out = path.join(RES, 'mipmap-' + density, name + '.png');
       await page.screenshot({ path: out, omitBackground: true });
+      await ctx.close();
+    }
+  }
+  if (WEB) {
+    fs.mkdirSync(WEB, { recursive: true });
+    const webIcons = {
+      // Icono normal: cuadrado redondeado sobre fondo transparente
+      'icon-192.png': { px: 192, body: VARIANTS.ic_launcher.body },
+      'icon-512.png': { px: 512, body: VARIANTS.ic_launcher.body },
+      // "Maskable": fondo hasta los bordes y el dibujo dentro de la zona segura (80 % central)
+      'icon-maskable-512.png': { px: 512, body: `<rect width="48" height="48" fill="${BG}"/>${motif(24, 11.2, 3.1)}` },
+    };
+    for (const [file, v] of Object.entries(webIcons)) {
+      const ctx = await browser.newContext({ viewport: { width: 48, height: 48 }, deviceScaleFactor: v.px / 48 });
+      const page = await ctx.newPage();
+      await page.setContent(page_(48, v.body));
+      await page.evaluate(() => document.fonts.ready);
+      await page.screenshot({ path: path.join(WEB, file), omitBackground: true });
       await ctx.close();
     }
   }

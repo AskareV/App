@@ -3,3 +3,7 @@ dist/
 *.apk
 *.log
 .DS_Store
+# Llave de firma: nunca al repositorio
+android/keystore.properties
+*.jks
+*.keystore

@@ -39,10 +39,11 @@ async function main() {
 
   // Abre la app con una fecha/hora fija y datos guardados de antemano.
   // native: true, o un objeto { captured, enabled, apps } con lo que "tiene guardado" Android
-  async function open({ now = '2026-11-11T10:00:00-04:00', seed = {}, native = false } = {}) {
+  async function open({ now = '2026-11-11T10:00:00-04:00', seed = {}, native = false, serviceWorker = false } = {}) {
     const ctx = await browser.newContext({
       timezoneId: 'America/La_Paz', locale: 'es-BO',
       viewport: { width: 412, height: 915 }, acceptDownloads: true,
+      serviceWorkers: serviceWorker ? 'allow' : 'block',
     });
     // Sin internet: la app no debe necesitar nada de fuera
     const external = [];
@@ -191,6 +192,36 @@ async function main() {
     await page.click('#gear-btn'); await page.click('#mcard-gastos');
     await page.click('#gear-btn'); await page.click('#mcard-analisis');
     assert.strictEqual(await page.locator('#tabs-analisis .tab.active').count(), 1);
+  });
+
+  await test('versión web: después de abrirla una vez, funciona sin internet', async (open) => {
+    const { ctx, page } = await open({ serviceWorker: true, seed: { 'gastos-app-v1': [mk(1, '2026-11-03', 15, 'Otro', 'Pan')] } });
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await page.evaluate(() => document.fonts.ready);
+    await ctx.setOffline(true);
+    await page.reload();
+    await page.click('#tab-list');
+    assert.deepStrictEqual(await listItems(page), ['Pan']);
+    await page.evaluate(() => document.fonts.ready);
+    assert.strictEqual(await page.evaluate(() => document.fonts.check('500 14px "DM Sans"')), true);
+  });
+
+  await test('versión web: el service worker borra las cachés de versiones anteriores', async (open) => {
+    const { page } = await open({ serviceWorker: true });
+    await page.evaluate(async () => {
+      const vieja = await caches.open('mis-finanzas-v1');
+      await vieja.put('/index.html', new Response('versión vieja'));
+    });
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    // Fuerza una activación nueva del service worker
+    await page.evaluate(async () => {
+      for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+      await navigator.serviceWorker.register('sw.js');
+      await navigator.serviceWorker.ready;
+    });
+    await page.waitForFunction(async () => !(await caches.keys()).includes('mis-finanzas-v1'));
   });
 
   console.log('Copia de seguridad');

@@ -9,6 +9,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mis Finanzas">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Mis Finanzas</title>
   <link rel="manifest" href="manifest.json">
   <style>
@@ -2043,9 +2045,10 @@ if(currentModeKey !== 'analisis') { load(); } else { updateAnPeriodUI(); }
 updatePeriodUI();
 updateReviewBar();
 
-// El service worker es solo para la versión web; dentro de la app Android no hace falta
+// El service worker es solo para la versión web (funcionar sin internet);
+// dentro de la app Android no hace falta
 if('serviceWorker' in navigator && !Native){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 </script>
 </body>
