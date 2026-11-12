@@ -36,11 +36,19 @@ En Ajustes (el engranaje) se puede exportar todo a un archivo e importarlo de vu
 
 ## Pruebas
 
-Requieren Playwright con Chromium instalado en el sistema.
+Las de la app requieren Playwright con Chromium instalado en el sistema:
 
 ```bash
 npm test
 ```
+
+Las de la lectura de avisos en segundo plano (Java) corren sin teléfono:
+
+```bash
+gradle -p android :app:testReleaseUnitTest
+```
+
+Las dos usan los mismos avisos de ejemplo, en `tests/notices.tsv`.
 
 ## Generar el APK
 
@@ -83,3 +91,9 @@ Si el usuario lo activa en Ajustes → «Detectar pagos del banco», el servicio
 y las guarda en el teléfono. La parte web las convierte en movimientos marcados como
 «por revisar» (`pending: true`) con `parsePaymentNotice()`, que extrae el monto en
 bolivianos, si es un pago o un ingreso, y un nombre sugerido.
+
+Si la app no está abierta cuando llega un pago, `PaymentAlert` muestra un aviso propio
+(«Pagaste Bs. 50,00 · ¿en qué fue?») que al tocarlo abre «Por revisar». Para eso lee el
+monto en segundo plano con `NoticeAmount`, una copia en Java de las reglas de
+`parsePaymentNotice()`; si se cambia una, hay que cambiar la otra (las pruebas de las dos
+usan `tests/notices.tsv`).

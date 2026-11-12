@@ -2092,10 +2092,16 @@ function newEntryId(list) {
 }
 
 // Recoge los avisos que capturó Android y los convierte en movimientos por revisar.
-let syncingCaptured = false;
-async function syncCaptured() {
-  if (!Native || syncingCaptured) return;
-  syncingCaptured = true;
+let syncRunning = null, syncAgain = false;
+function syncCaptured() {
+  if (!Native) return Promise.resolve();
+  if (syncRunning) { syncAgain = true; return syncRunning; }
+  syncRunning = (async () => {
+    do { syncAgain = false; await syncCapturedOnce(); } while (syncAgain);
+  })().finally(() => { syncRunning = null; });
+  return syncRunning;
+}
+async function syncCapturedOnce() {
   try {
     const res = await Native.PaymentCapture.getCaptured();
     const items = (res && res.items) || [];
@@ -2141,8 +2147,6 @@ async function syncCaptured() {
     if (isShown('capture-sheet')) renderCapture();
   } catch (e) {
     // Si algo falla, los avisos siguen guardados en Android y se reintenta la próxima vez
-  } finally {
-    syncingCaptured = false;
   }
 }
 
@@ -2360,7 +2364,8 @@ async function refreshCaptureStatus() {
   const active = apps.length > 0 && !!captureStatus.enabled;
   document.getElementById('capture-card').classList.toggle('on', active);
   document.getElementById('capture-summary').textContent =
-    !apps.length ? 'Desactivado' : !captureStatus.enabled ? 'Falta dar el permiso de notificaciones' : 'Activo · ' + apps.map(a => a.label).join(', ');
+    !apps.length ? 'Desactivado' : !captureStatus.enabled ? 'Falta dar el permiso de notificaciones'
+      : 'Activo · ' + apps.map(a => a.label).join(', ') + (notifyMissing() ? ' · falta permitir el aviso' : '');
   if (isShown('capture-sheet')) renderCapture();
 }
 function openCapture() {
@@ -2404,9 +2409,10 @@ function renderCapture() {
       ${enabled ? '' : `<div class="step-help">Si Android dice <b>«Ajuste restringido»</b> es porque la app no viene de la tienda. Toca el botón de abajo, luego los tres puntos <b>⋮</b> de arriba a la derecha y <b>«Permitir ajustes restringidos»</b>. Después vuelve aquí y da el permiso.
         <button class="step-btn link" data-act="appinfo">Abrir información de la app</button></div>`}
     </div>
+    ${notifyStepHtml()}
     <div class="step">
-      <div class="step-title">3 · Prueba con un pago pequeño</div>
-      <div class="step-desc" style="margin-bottom:0">Después de pagar, vuelve a Mis Finanzas: el gasto aparece arriba como «por revisar». Aquí abajo se ve cada aviso que leyó la app.</div>
+      <div class="step-title">4 · Prueba con un pago pequeño</div>
+      <div class="step-desc" style="margin-bottom:0">Después de pagar te llegará el aviso; al tocarlo, el gasto aparece listo para ponerle nombre. Aquí abajo se ve cada aviso del banco que leyó la app.</div>
     </div>
     <div class="step">
       <div class="step-title">Últimos avisos leídos</div>
@@ -2427,6 +2433,9 @@ document.getElementById('capture-body').addEventListener('click', async ev => {
     if (act === 'pick') await openPicker();
     else if (act === 'access') await Native.PaymentCapture.openAccessSettings();
     else if (act === 'appinfo') await Native.PaymentCapture.openAppInfo();
+    else if (act === 'notify-on') { captureStatus.notify = await Native.PaymentCapture.requestNotifyPermission(); refreshCaptureStatus(); }
+    else if (act === 'notify-off') { captureStatus.notify = await Native.PaymentCapture.setNotifyEnabled({ enabled: false }); refreshCaptureStatus(); }
+    else if (act === 'notify-settings') await Native.PaymentCapture.openNotifySettings();
     else if (act === 'share-log') {
       const text = readJSON(CAPTURE_LOG_KEY, []).map(l =>
         '[' + fmtLogTime(l.when) + ' · ' + l.app + '] ' + (l.result ? l.result.kind + ' ' + l.result.amount : 'sin monto') + '\n' + [l.title, l.text].filter(Boolean).join('\n')).join('\n\n');
@@ -2436,6 +2445,40 @@ document.getElementById('capture-body').addEventListener('click', async ev => {
     if (!/cancel/i.test(String((e && e.message) || e))) toast('⚠ No se pudo abrir');
   }
 });
+
+// Paso 3 de la configuración: el aviso "Pagaste Bs. 50,00 · ¿en qué fue?"
+function notifyMissing() {
+  const nt = captureStatus.notify;
+  return !!nt && nt.enabled && nt.permission !== 'granted';
+}
+function notifyStepHtml() {
+  const nt = captureStatus.notify || { enabled: false, permission: 'prompt' };
+  let status, cls, act, label;
+  if (!nt.enabled) { cls = 'no'; status = 'Desactivado'; act = 'notify-on'; label = 'Activar el aviso'; }
+  else if (nt.permission === 'granted') { cls = 'ok'; status = '✓ Activado'; act = 'notify-off'; label = 'Desactivar el aviso'; }
+  else if (nt.permission === 'denied') { cls = 'no'; status = 'Android tiene bloqueadas las notificaciones de la app'; act = 'notify-settings'; label = 'Abrir ajustes de notificaciones'; }
+  else { cls = 'no'; status = 'Falta permitir las notificaciones'; act = 'notify-on'; label = 'Permitir notificaciones'; }
+  return `<div class="step">
+      <div class="step-title">3 · Aviso para ponerle nombre</div>
+      <div class="step-desc">Si la app anota un pago mientras no la tienes abierta, te avisa: «Pagaste Bs. 50,00 · ¿en qué fue?». Al tocar el aviso se abre lo que hay por revisar.</div>
+      <div class="step-status ${cls}" id="notify-status">${status}</div>
+      <button class="step-btn${act === 'notify-off' ? ' link' : ''}" data-act="${act}">${label}</button>
+    </div>`;
+}
+// Con la detección ya activa, se pide una sola vez el permiso para el aviso
+async function maybeAskNotify() {
+  const nt = captureStatus.notify;
+  if (!nt || !nt.enabled || nt.permission !== 'prompt' || !captureStatus.enabled || !captureApps().length) return;
+  try { if (localStorage.getItem('notify-asked')) return; localStorage.setItem('notify-asked', '1'); } catch (e) { return; }
+  try { captureStatus.notify = await Native.PaymentCapture.requestNotifyPermission(); refreshCaptureStatus(); } catch (e) { /* sin aviso */ }
+}
+// Tocaron el aviso: se recoge lo detectado y se abre «Por revisar»
+async function openReviewFromAlert() {
+  await syncCaptured();
+  if (!reviewCards().length) return;
+  closeSettings(); closeCapture(); closePicker();
+  openReview();
+}
 
 async function openPicker() {
   pickerApps = null;
@@ -2470,10 +2513,11 @@ function closePicker() {
 if (Native) {
   document.getElementById('capture-section').style.display = '';
   Native.PaymentCapture.addListener('captured', () => syncCaptured());
+  Native.PaymentCapture.addListener('openReview', () => openReviewFromAlert());
   Native.App.addListener('resume', () => { refreshCaptureStatus(); syncCaptured(); });
   // Al abrir: Android debe vigilar exactamente las apps elegidas aquí
   Native.PaymentCapture.setWatched({ packages: captureApps().map(a => a.pkg) }).catch(() => {})
-    .then(() => { refreshCaptureStatus(); syncCaptured(); });
+    .then(() => { refreshCaptureStatus().then(maybeAskNotify); syncCaptured(); });
 }
 
 // ── INIT ─────────────────────────────────────────────

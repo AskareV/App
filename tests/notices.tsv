@@ -1,0 +1,42 @@
+# Casos de lectura de avisos de pago. Los usan las pruebas de la app (tests/run.js)
+# y las de la lectura en segundo plano de Android (NoticeAmountTest.java), para que coincidan.
+# Columnas separadas por tabulador: título, texto, tipo (gastos/ingresos, o - si no es un pago),
+# monto (o -), nombre propuesto (* = no se comprueba; - si no es un pago).
+BNB	Pago QR realizado por Bs 50.00 a JUAN PEREZ	gastos	50	Pago a JUAN PEREZ
+Transferencia exitosa	Transferiste Bs. 1.250,50 a María Fernández. Saldo disponible: Bs. 3.400,00	gastos	1250.5	Pago a María Fernández
+Débito en cuenta	Se debitó BOB 35,00 de tu cuenta 1234567 por PAGO QR. Nro. operación 987654	gastos	35	Pago detectado
+Compra con tarjeta	Compra por 89.90 Bs. en HIPERMAXI SA el 12/11/2026 14:32	gastos	89.9	Pago a HIPERMAXI SA
+Mensajes	BANCO UNION: Debito de Bs 200.00 en su cuenta ...1234 por transferencia QR a ROSA QUISPE. Saldo Bs 1,543.20	gastos	200	Pago a ROSA QUISPE
+QR	PAGO QR A TIENDA DOÑA MARIA POR BS 12.50 EXITOSO	gastos	12.5	Pago a TIENDA DOÑA MARIA
+77712345	BCP: Realizaste un pago QR de Bs 45.00 a Farmacia Chavez el 12/11	gastos	45	Pago a Farmacia Chavez
+	Pago de servicios: 150 bolivianos. Código 445566	gastos	150	Pago detectado
+	Pago realizado 75.00 Bs. 12/11/2026	gastos	75	Pago detectado
+	Nro. 123456 Bs 80.00 pago QR	gastos	80	Pago detectado
+Yape	Recibiste Bs 120 de Carlos Mamani	ingresos	120	De Carlos Mamani
+Transferencia recibida	Te transfirieron Bs 1.500 desde la cuenta de PEDRO ROJAS	ingresos	1500	De PEDRO ROJAS
+	Recibiste un pago QR de Bs 30 de Ana Flores	ingresos	30	De Ana Flores
+Notificaciones	Recibio transferencia de la cuenta 1234567890 JUAN PEREZ AL BANCO NACIONAL DE BOLIVIA S.A., por Bs. 1.00 Concepto sin especificar	ingresos	1	De JUAN PEREZ
+Notificaciones	Recibio transferencia de la cuenta 9876543210 MARIA DE LOS ANGELES ROJAS AL BANCO MERCANTIL SANTA CRUZ S.A., por Bs. 1,250.50 Concepto Alquiler	ingresos	1250.5	De MARIA DE LOS ANGELES ROJAS
+Transferencia Interbancaria Simple	Tu transferencia de 1.00 bolivianos ha sido procesada	gastos	1	Pago detectado
+Transferencia Interbancaria Simple	Tu transferencia de 2,350.75 bolivianos ha sido procesada	gastos	2350.75	Pago detectado
+	Transferiste Bs 80 a la cuenta 1234567 ROSA QUISPE	gastos	80	Pago a ROSA QUISPE
+	Te abonaron Bs 45 desde la cuenta ****5252 ANA ROJAS	ingresos	45	De ANA ROJAS
+	Pagaste Bs. 64,50 a KIOSCO	gastos	64.5	Pago a KIOSCO
+	Recibiste Bs 300 de Luis Rojas	ingresos	300	De Luis Rojas
+	Pago por Bs 1,234.50	gastos	1234.5	*
+	Pago por Bs. 1.234,50	gastos	1234.5	*
+	Pago por Bs 1.500	gastos	1500	*
+	Pago por Bs 0,50	gastos	0.5	*
+	Pago por Bs50	gastos	50	*
+	Pago por BOB 25	gastos	25	*
+	Pago por 50,5 Bs	gastos	50.5	*
+	Pago por Bs.-18.00	gastos	18	*
+	Pago por bs 7	gastos	7	*
+	Pago por Bs 1.234.567,89	gastos	1234567.89	*
+Banco	Aprovecha 2x1 en cines este fin de semana	-	-	-
+Banco	Tu saldo es Bs 500.00	-	-	-
+Banco	Saldo disponible: Bs 1,234.00	-	-	-
+Banco	Compra por USD 20.00 en AMAZON	-	-	-
+Banco	Tu código de verificación es 482913	-	-	-
+Banco	Los clubs 5 abren a las 10	-	-	-
+Banco		-	-	-

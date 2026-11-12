@@ -1,5 +1,6 @@
 package com.askarev.misfinanzas;
 
+import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
@@ -13,10 +14,13 @@ import android.service.notification.NotificationListenerService;
 import androidx.core.app.NotificationManagerCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 import java.lang.ref.WeakReference;
 import java.text.Collator;
 import java.util.ArrayList;
@@ -30,11 +34,22 @@ import org.json.JSONException;
  * Puente entre la parte web y la captura de notificaciones de pago:
  * elegir qué apps se vigilan, abrir los ajustes del permiso y recoger los avisos capturados.
  */
-@CapacitorPlugin(name = "PaymentCapture")
+@CapacitorPlugin(
+    name = "PaymentCapture",
+    permissions = { @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = PaymentCapturePlugin.NOTIFICATIONS) }
+)
 public class PaymentCapturePlugin extends Plugin {
 
+    static final String NOTIFICATIONS = "notifications";
     private static final String EVENT_CAPTURED = "captured";
+    private static final String EVENT_OPEN_REVIEW = "openReview";
     private static WeakReference<PaymentCapturePlugin> current = new WeakReference<>(null);
+    /** Si la pantalla de la app está a la vista (entonces no hace falta el aviso propio). */
+    private static volatile boolean appVisible = false;
+
+    static boolean isAppVisible() {
+        return appVisible;
+    }
 
     @Override
     public void load() {
@@ -45,7 +60,26 @@ public class PaymentCapturePlugin extends Plugin {
     @Override
     protected void handleOnResume() {
         super.handleOnResume();
+        appVisible = true;
+        // Con la app abierta, lo detectado se ve en «Por revisar»: el aviso ya no hace falta
+        PaymentAlert.clear(getContext());
         requestRebindIfEnabled();
+    }
+
+    @Override
+    protected void handleOnPause() {
+        super.handleOnPause();
+        appVisible = false;
+    }
+
+    /** Se abrió la app tocando el aviso: hay que mostrar «Por revisar». */
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        super.handleOnNewIntent(intent);
+        if (intent == null || !intent.getBooleanExtra(PaymentAlert.EXTRA_OPEN_REVIEW, false)) return;
+        intent.removeExtra(PaymentAlert.EXTRA_OPEN_REVIEW);
+        // Se guarda hasta que la página esté lista para recibirlo
+        notifyListeners(EVENT_OPEN_REVIEW, new JSObject(), true);
     }
 
     @Override
@@ -67,7 +101,65 @@ public class PaymentCapturePlugin extends Plugin {
         result.put("enabled", isListenerEnabled());
         result.put("watched", new JSArray(CaptureStore.getWatched(getContext())));
         result.put("androidVersion", Build.VERSION.SDK_INT);
+        result.put("notify", notifyStatus());
         call.resolve(result);
+    }
+
+    // ── Aviso propio al detectar un pago ──
+
+    /** {enabled, permission: granted | prompt | denied} */
+    private JSObject notifyStatus() {
+        JSObject status = new JSObject();
+        status.put("enabled", PaymentAlert.isEnabled(getContext()));
+        status.put("permission", notifyPermission());
+        return status;
+    }
+
+    private String notifyPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PermissionState state = getPermissionState(NOTIFICATIONS);
+            if (state == PermissionState.DENIED) return "denied";
+            if (state != PermissionState.GRANTED) return "prompt";
+        }
+        return NotificationManagerCompat.from(getContext()).areNotificationsEnabled() ? "granted" : "denied";
+    }
+
+    @PluginMethod
+    public void setNotifyEnabled(PluginCall call) {
+        PaymentAlert.setEnabled(getContext(), Boolean.TRUE.equals(call.getBoolean("enabled", true)));
+        call.resolve(notifyStatus());
+    }
+
+    /** Activa el aviso y, si hace falta (Android 13 o más), pide permiso para mostrar notificaciones. */
+    @PluginMethod
+    public void requestNotifyPermission(PluginCall call) {
+        PaymentAlert.setEnabled(getContext(), true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && getPermissionState(NOTIFICATIONS) != PermissionState.GRANTED) {
+            requestPermissionForAlias(NOTIFICATIONS, call, "notifyPermissionAnswered");
+        } else {
+            call.resolve(notifyStatus());
+        }
+    }
+
+    @PermissionCallback
+    private void notifyPermissionAnswered(PluginCall call) {
+        call.resolve(notifyStatus());
+    }
+
+    /** Abre los ajustes de notificaciones de la app (si Android las tiene bloqueadas). */
+    @PluginMethod
+    public void openNotifySettings(PluginCall call) {
+        Context context = getContext();
+        Intent intent = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            ? new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName())
+            : new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.getPackageName(), null));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            context.startActivity(intent);
+            call.resolve();
+        } catch (ActivityNotFoundException | SecurityException e) {
+            call.reject("No se pudo abrir los ajustes de notificaciones");
+        }
     }
 
     /** Apps instaladas que se pueden abrir desde el menú, para que el usuario elija su banco. */

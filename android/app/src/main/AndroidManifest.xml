@@ -58,4 +58,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Para el aviso "Pagaste Bs. 50,00 · ¿en qué fue?" (Android 13 en adelante lo pide) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

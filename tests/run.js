@@ -442,59 +442,22 @@ async function main() {
 
   console.log('Pagos detectados: lectura de avisos');
 
-  await test('saca monto, tipo y nombre de avisos con distintos formatos', async (open) => {
-    const { page } = await open();
-    const casos = [
-      [{ title: 'BNB', text: 'Pago QR realizado por Bs 50.00 a JUAN PEREZ' }, 'gastos', 50, 'Pago a JUAN PEREZ'],
-      [{ title: 'Transferencia exitosa', text: 'Transferiste Bs. 1.250,50 a María Fernández. Saldo disponible: Bs. 3.400,00' }, 'gastos', 1250.5, 'Pago a María Fernández'],
-      [{ title: 'Débito en cuenta', text: 'Se debitó BOB 35,00 de tu cuenta 1234567 por PAGO QR. Nro. operación 987654' }, 'gastos', 35, 'Pago detectado'],
-      [{ title: 'Compra con tarjeta', text: 'Compra por 89.90 Bs. en HIPERMAXI SA el 12/11/2026 14:32' }, 'gastos', 89.9, 'Pago a HIPERMAXI SA'],
-      [{ title: 'Mensajes', text: 'BANCO UNION: Debito de Bs 200.00 en su cuenta ...1234 por transferencia QR a ROSA QUISPE. Saldo Bs 1,543.20' }, 'gastos', 200, 'Pago a ROSA QUISPE'],
-      [{ title: 'QR', text: 'PAGO QR A TIENDA DOÑA MARIA POR BS 12.50 EXITOSO' }, 'gastos', 12.5, 'Pago a TIENDA DOÑA MARIA'],
-      [{ title: '77712345', text: 'BCP: Realizaste un pago QR de Bs 45.00 a Farmacia Chavez el 12/11' }, 'gastos', 45, 'Pago a Farmacia Chavez'],
-      [{ title: '', text: 'Pago de servicios: 150 bolivianos. Código 445566' }, 'gastos', 150, 'Pago detectado'],
-      [{ title: '', text: 'Pago realizado 75.00 Bs. 12/11/2026' }, 'gastos', 75, 'Pago detectado'],
-      [{ title: '', text: 'Nro. 123456 Bs 80.00 pago QR' }, 'gastos', 80, 'Pago detectado'],
-      [{ title: 'Yape', text: 'Recibiste Bs 120 de Carlos Mamani' }, 'ingresos', 120, 'De Carlos Mamani'],
-      [{ title: 'Transferencia recibida', text: 'Te transfirieron Bs 1.500 desde la cuenta de PEDRO ROJAS' }, 'ingresos', 1500, 'De PEDRO ROJAS'],
-      [{ title: '', text: 'Recibiste un pago QR de Bs 30 de Ana Flores' }, 'ingresos', 30, 'De Ana Flores'],
-      // Formatos reales: BMSC (recibido) y BNB (enviado). Nombre y cuenta inventados.
-      [{ title: 'Notificaciones', text: 'Recibio transferencia de la cuenta 1234567890 JUAN PEREZ AL BANCO NACIONAL DE BOLIVIA S.A., por Bs. 1.00 Concepto sin especificar' }, 'ingresos', 1, 'De JUAN PEREZ'],
-      [{ title: 'Notificaciones', text: 'Recibio transferencia de la cuenta 9876543210 MARIA DE LOS ANGELES ROJAS AL BANCO MERCANTIL SANTA CRUZ S.A., por Bs. 1,250.50 Concepto Alquiler' }, 'ingresos', 1250.5, 'De MARIA DE LOS ANGELES ROJAS'],
-      [{ title: 'Transferencia Interbancaria Simple', text: 'Tu transferencia de 1.00 bolivianos ha sido procesada' }, 'gastos', 1, 'Pago detectado'],
-      [{ title: 'Transferencia Interbancaria Simple', text: 'Tu transferencia de 2,350.75 bolivianos ha sido procesada' }, 'gastos', 2350.75, 'Pago detectado'],
-      [{ title: '', text: 'Transferiste Bs 80 a la cuenta 1234567 ROSA QUISPE' }, 'gastos', 80, 'Pago a ROSA QUISPE'],
-      [{ title: '', text: 'Te abonaron Bs 45 desde la cuenta ****5252 ANA ROJAS' }, 'ingresos', 45, 'De ANA ROJAS'],
-    ];
-    for (const [aviso, kind, amount, detail] of casos) {
-      const r = await page.evaluate((a) => parsePaymentNotice(a), aviso);
-      assert.deepStrictEqual(r, { kind, amount, detail }, 'aviso: ' + aviso.text);
-    }
-  });
+  // Los casos están en tests/notices.tsv: los mismos que prueba la lectura en segundo plano de Android
+  const notices = fs.readFileSync(path.join(__dirname, 'notices.tsv'), 'utf8').split('\n')
+    .filter((l) => l && !l.startsWith('#'))
+    .map((l) => { const [title, text, kind, amount, detail] = l.split('\t'); return { title, text, kind, amount, detail }; });
 
-  await test('entiende los formatos de número habituales', async (open) => {
+  await test(`lee ${notices.length} avisos de ejemplo: monto, tipo y nombre (tests/notices.tsv)`, async (open) => {
     const { page } = await open();
-    const casos = { 'Bs 1,234.50': 1234.5, 'Bs. 1.234,50': 1234.5, 'Bs 1.500': 1500, 'Bs 0,50': 0.5, 'Bs50': 50, 'BOB 25': 25, '50,5 Bs': 50.5, 'Bs.-18.00': 18, 'bs 7': 7, 'Bs 1.234.567,89': 1234567.89 };
-    for (const [texto, esperado] of Object.entries(casos)) {
-      const r = await page.evaluate((t) => parsePaymentNotice({ title: '', text: 'Pago por ' + t }), texto);
-      assert.strictEqual(r && r.amount, esperado, 'texto: ' + texto);
-    }
-  });
-
-  await test('no inventa pagos donde no hay un monto en bolivianos', async (open) => {
-    const { page } = await open();
-    const casos = [
-      'Aprovecha 2x1 en cines este fin de semana',
-      'Tu saldo es Bs 500.00',
-      'Saldo disponible: Bs 1,234.00',
-      'Compra por USD 20.00 en AMAZON',
-      'Tu código de verificación es 482913',
-      'Los clubs 5 abren a las 10',
-      '',
-    ];
-    for (const text of casos) {
-      assert.strictEqual(await page.evaluate((t) => parsePaymentNotice({ title: 'Banco', text: t }), text), null, 'texto: ' + text);
-    }
+    const results = await page.evaluate((list) => list.map((n) => parsePaymentNotice({ title: n.title, text: n.text })), notices);
+    notices.forEach((n, i) => {
+      const r = results[i];
+      if (n.kind === '-') { assert.strictEqual(r, null, 'no es un pago: ' + JSON.stringify(n.text)); return; }
+      assert.ok(r, 'sin resultado: ' + JSON.stringify(n.text));
+      assert.strictEqual(r.kind, n.kind, 'tipo: ' + n.text);
+      assert.strictEqual(r.amount, Number(n.amount), 'monto: ' + n.text);
+      if (n.detail !== '*') assert.strictEqual(r.detail, n.detail, 'nombre: ' + n.text);
+    });
   });
 
   console.log('Pagos detectados: en la app');
@@ -705,7 +668,7 @@ async function main() {
     assert.strictEqual(await page.locator('#capture-body [data-act="appinfo"]').count(), 0);
     await page.click('#capture-sheet .sheet-close');
     await page.click('#gear-btn');
-    assert.strictEqual(await page.textContent('#capture-summary'), 'Activo · Banco Ejemplo');
+    assert.strictEqual(await page.textContent('#capture-summary'), 'Activo · Banco Ejemplo · falta permitir el aviso');
 
     // Quitar la app deja de vigilarla
     await page.click('#capture-card');
@@ -770,6 +733,82 @@ async function main() {
     assert.strictEqual(await b.page.textContent('#review-bar-text'), '1 pago por revisar');
   });
 
+
+
+  console.log('Aviso al detectar un pago');
+
+  await test('abrir la app desde el aviso muestra «Por revisar»', async (open) => {
+    const { page } = await open({ native: { enabled: true, openReviewOnStart: true, captured: [aviso('n1', 'Tu transferencia de 50.00 bolivianos ha sido procesada')] } });
+    await page.waitForSelector('#review-sheet.show');
+    assert.strictEqual(await page.locator('#review-list .rv-card').count(), 1);
+    assert.match(await page.textContent('#review-list .rv-amount'), /Bs\. 50,00/);
+  });
+
+  await test('tocar el aviso con la app en segundo plano también abre «Por revisar»', async (open) => {
+    const { page } = await open({ native: { enabled: true } });
+    await page.waitForFunction(() => !!window.__native.listeners['PaymentCapture:openReview']);
+    await page.click('#gear-btn');
+    await page.evaluate((a) => { window.__native.captured.push(a); window.__native.listeners['PaymentCapture:openReview']({}); }, aviso('n2', 'Pagaste Bs 12 a KIOSCO'));
+    await page.waitForSelector('#review-sheet.show');
+    assert.strictEqual(await page.locator('#settings-modal.show').count(), 0);
+    assert.strictEqual(await page.inputValue('#review-list .rv-name'), 'Pago a KIOSCO');
+  });
+
+  await test('si no queda nada por revisar, tocar el aviso no abre nada', async (open) => {
+    const { page } = await open({ native: { enabled: true, openReviewOnStart: true } });
+    await page.waitForFunction(() => window.__native.calls.some((c) => c.method === 'getCaptured'));
+    await page.waitForTimeout(200);
+    assert.strictEqual(await page.locator('#review-sheet.show').count(), 0);
+  });
+
+  await test('con la detección activa, se pide permiso para el aviso una sola vez', async (open) => {
+    const { page } = await open({ seed: { 'capture-apps': [{ pkg: 'com.bnb', label: 'BNB' }] }, native: { enabled: true } });
+    await page.waitForFunction(() => window.__native.calls.some((c) => c.method === 'requestNotifyPermission'));
+    await page.click('#gear-btn');
+    await page.waitForFunction(() => /^Activo · BNB$/.test(document.getElementById('capture-summary').textContent));
+    await page.reload();
+    await page.waitForFunction(() => window.__native.calls.some((c) => c.method === 'getStatus'));
+    await page.waitForTimeout(300);
+    assert.strictEqual((await nativeCalls(page, 'PaymentCapture', 'requestNotifyPermission')).length, 0);
+  });
+
+  await test('sin la detección activa no se pide el permiso del aviso', async (open) => {
+    const { page } = await open({ native: { enabled: false } });
+    await page.waitForFunction(() => window.__native.calls.some((c) => c.method === 'getStatus'));
+    await page.waitForTimeout(300);
+    assert.strictEqual((await nativeCalls(page, 'PaymentCapture', 'requestNotifyPermission')).length, 0);
+  });
+
+  await test('paso 3: permitir, desactivar y volver a activar el aviso', async (open) => {
+    const { page } = await open({ native: { enabled: false } });
+    await page.click('#gear-btn');
+    await page.click('#capture-card');
+    await page.waitForFunction(() => document.getElementById('notify-status'));
+    assert.strictEqual(await page.textContent('#notify-status'), 'Falta permitir las notificaciones');
+    await page.click('#capture-body [data-act="notify-on"]');
+    await page.waitForFunction(() => document.getElementById('notify-status').textContent === '✓ Activado');
+    await page.click('#capture-body [data-act="notify-off"]');
+    await page.waitForFunction(() => document.getElementById('notify-status').textContent === 'Desactivado');
+    assert.deepStrictEqual((await nativeCalls(page, 'PaymentCapture', 'setNotifyEnabled')).map((c) => c.options.enabled), [false]);
+    await page.click('#capture-body [data-act="notify-on"]');
+    await page.waitForFunction(() => document.getElementById('notify-status').textContent === '✓ Activado');
+  });
+
+  await test('si Android bloqueó las notificaciones, el paso 3 lleva a sus ajustes', async (open) => {
+    const { page } = await open({ native: { enabled: true, notify: { enabled: true, permission: 'denied' } } });
+    await page.click('#gear-btn');
+    await page.click('#capture-card');
+    await page.waitForFunction(() => document.getElementById('notify-status'));
+    assert.match(await page.textContent('#notify-status'), /bloqueadas/);
+    await page.click('#capture-body [data-act="notify-settings"]');
+    assert.strictEqual((await nativeCalls(page, 'PaymentCapture', 'openNotifySettings')).length, 1);
+  });
+
+  await test('Ajustes avisa si falta permitir el aviso', async (open) => {
+    const { page } = await open({ seed: { 'capture-apps': [{ pkg: 'com.bnb', label: 'BNB' }], 'notify-asked': '1' }, native: { enabled: true } });
+    await page.click('#gear-btn');
+    await page.waitForFunction(() => /falta permitir el aviso/.test(document.getElementById('capture-summary').textContent));
+  });
 
   console.log('Préstamos');
 

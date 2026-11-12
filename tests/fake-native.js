@@ -7,6 +7,11 @@ function fakeNativeBridge(capture) {
     calls: [], listeners: {},
     captured: capture.captured || [], captureEnabled: !!capture.enabled, watched: [],
     apps: capture.apps || [],
+    // Aviso propio: activado y permiso (granted | prompt | denied); qué responde Android al pedirlo
+    notify: capture.notify || { enabled: true, permission: 'prompt' },
+    notifyAnswer: capture.notifyAnswer || 'granted',
+    // Simula que la app se abrió tocando el aviso (Android guarda el evento hasta que la página escucha)
+    openReviewOnStart: !!capture.openReviewOnStart,
   };
   const promise = { rtype: 'promise' };
   window.Capacitor = {
@@ -17,7 +22,8 @@ function fakeNativeBridge(capture) {
       {
         name: 'PaymentCapture',
         methods: [{ name: 'addListener' }, { name: 'removeListener' }].concat(
-          ['getStatus', 'listApps', 'setWatched', 'openAccessSettings', 'openAppInfo', 'getCaptured', 'removeCaptured'].map((name) => ({ name, ...promise }))
+          ['getStatus', 'listApps', 'setWatched', 'openAccessSettings', 'openAppInfo', 'getCaptured', 'removeCaptured',
+            'setNotifyEnabled', 'requestNotifyPermission', 'openNotifySettings'].map((name) => ({ name, ...promise }))
         ),
       },
     ],
@@ -28,7 +34,13 @@ function fakeNativeBridge(capture) {
       if (plugin === 'Share' && window.__native.shareFails) return Promise.reject(new Error(window.__native.shareFails));
       if (plugin === 'PaymentCapture') {
         const st = window.__native;
-        if (method === 'getStatus') return Promise.resolve({ enabled: st.captureEnabled, watched: st.watched, androidVersion: 34 });
+        if (method === 'getStatus') return Promise.resolve({ enabled: st.captureEnabled, watched: st.watched, androidVersion: 34, notify: { ...st.notify } });
+        if (method === 'setNotifyEnabled') { st.notify.enabled = options.enabled; return Promise.resolve({ ...st.notify }); }
+        if (method === 'requestNotifyPermission') {
+          st.notify.enabled = true;
+          if (st.notify.permission === 'prompt') st.notify.permission = st.notifyAnswer;
+          return Promise.resolve({ ...st.notify });
+        }
         if (method === 'listApps') return Promise.resolve({ apps: st.apps });
         if (method === 'setWatched') st.watched = options.packages;
         if (method === 'getCaptured') return Promise.resolve({ items: st.captured.slice() });
@@ -41,7 +53,13 @@ function fakeNativeBridge(capture) {
     },
     nativeCallback(plugin, method, options, callback) {
       window.__native.calls.push({ plugin, method, options });
-      if (method === 'addListener') window.__native.listeners[plugin + ':' + options.eventName] = callback;
+      if (method === 'addListener') {
+        window.__native.listeners[plugin + ':' + options.eventName] = callback;
+        if (plugin === 'PaymentCapture' && options.eventName === 'openReview' && window.__native.openReviewOnStart) {
+          window.__native.openReviewOnStart = false;
+          setTimeout(() => callback({}), 0);
+        }
+      }
       return 'callback-1';
     },
   };

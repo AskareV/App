@@ -71,17 +71,13 @@ public class PaymentNotificationListener extends NotificationListenerService {
             }
             if (title.isEmpty() && text.isEmpty()) return;
 
-            boolean added = CaptureStore.add(
-                this,
-                packageName,
-                appLabel(packageName),
-                sbn.getKey(),
-                notification.when,
-                sbn.getPostTime(),
-                title,
-                text
-            );
-            if (added) PaymentCapturePlugin.notifyCaptured();
+            String label = appLabel(packageName);
+            boolean added = CaptureStore.add(this, packageName, label, sbn.getKey(), notification.when, sbn.getPostTime(), title, text);
+            if (added) {
+                PaymentCapturePlugin.notifyCaptured();
+                // Con la app cerrada, aviso propio para ponerle nombre al pago
+                PaymentAlert.onCaptured(this, label, title, text, sbn.getPostTime());
+            }
         } catch (RuntimeException e) {
             // Un aviso raro nunca debe tumbar el servicio
             Log.w(TAG, "No se pudo leer una notificación", e);
