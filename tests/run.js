@@ -1312,6 +1312,157 @@ async function main() {
     assert.strictEqual(await page.textContent('#topbar-sub'), 'Te deben Bs. 250,00 · 1 sin devolver');
   });
 
+
+  // Varios préstamos con distinta antigüedad y estado (hoy es 11/11/2026)
+  const variosPrestamos = {
+    'gastos-app-v1': [
+      mk(1, '2026-11-08', 150, 'Préstamo', 'Ana'),
+      mk(2, '2026-11-05', 500, 'Préstamo', 'Juan'),
+      mk(3, '2026-10-20', 80, 'Préstamo', 'Luis'),
+      mk(4, '2026-06-01', 400, 'Préstamo', 'Pedro'),
+      mk(5, '2026-03-01', 100, 'Préstamo', 'Rosa'),
+      { ...mk(6, '2026-09-01', 100, 'Otro', 'Préstamo no devuelto: Rosa'), lostLoanId: 5 },
+    ],
+    'ingresos-app-v1': [
+      { ...mk(10, '2026-11-10', 200, 'Devolución', 'Devolución: Juan'), loanId: 2 },
+      { ...mk(11, '2026-10-28', 80, 'Devolución', 'Devolución: Luis'), loanId: 3 },
+    ],
+  };
+  const loanNames = (page) => page.$$eval('#loans-list .loan-card .item-detail', (els) => els.map((e) => e.textContent));
+  const chipTexts = (page) => page.$$eval('#loan-chips .chip', (els) => els.map((e) => e.textContent));
+
+  await test('Mis Préstamos: filtros con conteo, búsqueda y orden', async (open) => {
+    const { page } = await open({ seed: variosPrestamos });
+    await goMode(page, 'prestamos');
+    assert.deepStrictEqual(await chipTexts(page), ['Pendientes (3)', 'Antiguos (1)', 'Devueltos (1)', 'No devueltos (1)', 'Todos (5)']);
+    assert.deepStrictEqual(await loanNames(page), ['Ana', 'Juan', 'Pedro']);
+    await page.click('#loan-chips [data-filter="old"]');
+    assert.deepStrictEqual(await loanNames(page), ['Pedro']);
+    await page.click('#loan-chips [data-filter="repaid"]');
+    assert.deepStrictEqual(await loanNames(page), ['Luis']);
+    await page.click('#loan-chips [data-filter="lost"]');
+    assert.deepStrictEqual(await loanNames(page), ['Rosa']);
+    await page.click('#loan-chips [data-filter="all"]');
+    assert.deepStrictEqual(await loanNames(page), ['Ana', 'Juan', 'Luis', 'Pedro', 'Rosa']);
+    // Búsqueda sin tildes ni mayúsculas
+    await page.fill('#loan-search', 'jU');
+    assert.deepStrictEqual(await loanNames(page), ['Juan']);
+    await page.fill('#loan-search', 'zzz');
+    assert.match(await page.textContent('#loans-list'), /Ningún préstamo con ese nombre/);
+    await page.fill('#loan-search', '');
+    // Orden
+    await page.click('#loan-chips [data-filter="pending"]');
+    await pickCsel(page, 'loan-sort', 'Más antiguos');
+    assert.deepStrictEqual(await loanNames(page), ['Pedro', 'Juan', 'Ana']);
+    await pickCsel(page, 'loan-sort', 'Mayor monto');
+    assert.deepStrictEqual(await loanNames(page), ['Pedro', 'Juan', 'Ana']);
+    const cards = await loanCards(page);
+    assert.match(cards[0], /hace 5 meses ANTIGUO/i);
+    assert.match(cards[1], /hace 6 días/);
+    assert.match(cards[1], /Bs\. 300,00 falta/i);
+  });
+
+  await test('«Ya no me lo devolverán»: lo que falta pasa a gasto y el saldo no cambia', async (open) => {
+    const seed = { ...variosPrestamos, 'app-mode': 'analisis' };
+    const { page } = await open({ seed });
+    await page.click('#antab-hist');
+    const before = (await page.innerText('#an-hist-content')).replace(/\s+/g, ' ');
+    const enCuenta = before.match(/TENGO EN LA CUENTA (Bs\. [\d.,-]+)/)[1];
+    assert.match(before, /ME DEBEN \(PRÉSTAMOS\) Bs\. 850,00/);
+    await goMode(page, 'prestamos');
+    await page.locator('#loans-list .loan-card', { hasText: 'Pedro' }).locator('[data-more]').click();
+    assert.match(await page.textContent('#la-sub'), /Prestaste Bs\. 400,00 el 01\/06\/2026 · falta Bs\. 400,00/);
+    await page.click('#la-list [data-act="lost"]');
+    await expectToast(page, /Bs\. 400,00 pasan a contarse como gasto/);
+    const g = (await stored(page, 'gastos-app-v1')).find((x) => x.lostLoanId === 4);
+    assert.deepStrictEqual([g.amount, g.cat, g.detail, g.date], [400, 'Otro', 'Préstamo no devuelto: Pedro', '2026-11-11T12:00:00']);
+    assert.deepStrictEqual(await chipTexts(page), ['Pendientes (2)', 'Devueltos (1)', 'No devueltos (2)', 'Todos (5)']);
+    assert.strictEqual(await page.textContent('#topbar-sub'), 'Te deben Bs. 450,00 · 2 sin devolver');
+    // Cuenta como gasto de noviembre…
+    await goMode(page, 'gastos');
+    assert.match(await page.textContent('#topbar-sub'), /Bs\. 400,00/);
+    await page.click('#tab-list');
+    assert.match(await page.textContent('#list'), /Préstamo no devuelto/);
+    // …pero lo que hay en la cuenta no cambia
+    await goMode(page, 'analisis');
+    await page.click('#antab-hist');
+    const after = (await page.innerText('#an-hist-content')).replace(/\s+/g, ' ');
+    assert.strictEqual(after.match(/TENGO EN LA CUENTA (Bs\. [\d.,-]+)/)[1], enCuenta);
+    assert.match(after, /ME DEBEN \(PRÉSTAMOS\) Bs\. 450,00/);
+  });
+
+  await test('un préstamo dado por perdido puede volver a pendiente', async (open) => {
+    const { page } = await open({ seed: variosPrestamos });
+    await goMode(page, 'prestamos');
+    await page.click('#loan-chips [data-filter="lost"]');
+    await page.click('#loans-list [data-more]');
+    await page.click('#la-list [data-act="reopen"]');
+    await expectToast(page, /pendiente otra vez/);
+    assert.strictEqual((await stored(page, 'gastos-app-v1')).some((x) => x.lostLoanId === 5), false);
+    assert.deepStrictEqual(await chipTexts(page), ['Pendientes (4)', 'Antiguos (2)', 'Devueltos (1)', 'Todos (5)']);
+  });
+
+  await test('editar un préstamo desde ⋯', async (open) => {
+    const { page } = await open({ seed: variosPrestamos });
+    await goMode(page, 'prestamos');
+    await page.locator('#loans-list .loan-card', { hasText: 'Ana' }).locator('[data-more]').click();
+    await page.click('#la-list [data-act="edit"]');
+    assert.strictEqual(await page.textContent('#loan-modal-title'), 'Editar préstamo');
+    assert.strictEqual(await page.inputValue('#loan-amount'), '150');
+    await page.fill('#loan-name', 'Ana María');
+    await page.fill('#loan-amount', '180');
+    await page.click('#btn-loan-confirm');
+    await expectToast(page, /Préstamo actualizado/);
+    const ana = (await stored(page, 'gastos-app-v1')).find((x) => x.id === 1);
+    assert.deepStrictEqual([ana.detail, ana.amount, ana.cat, ana.date], ['Ana María', 180, 'Préstamo', '2026-11-08T12:00:00']);
+    assert.strictEqual((await stored(page, 'gastos-app-v1')).length, 6);
+  });
+
+  await test('eliminar un préstamo pide confirmación y lo borra con lo suyo', async (open) => {
+    const { page } = await open({ seed: variosPrestamos });
+    await goMode(page, 'prestamos');
+    await page.click('#loan-chips [data-filter="all"]');
+    await page.locator('#loans-list .loan-card', { hasText: 'Rosa' }).locator('[data-more]').click();
+    await page.click('#la-list [data-act="delete"]');
+    assert.match(await page.textContent('#la-list [data-act="delete"]'), /¿Seguro\? Toca otra vez/);
+    assert.strictEqual((await stored(page, 'gastos-app-v1')).length, 6, 'un toque no borra');
+    await page.click('#la-list [data-act="delete"]');
+    await expectToast(page, /Préstamo eliminado/);
+    const gastos = await stored(page, 'gastos-app-v1');
+    assert.strictEqual(gastos.some((x) => x.id === 5 || x.lostLoanId === 5), false);
+    // Con devoluciones: quedan como ingresos normales
+    await page.locator('#loans-list .loan-card', { hasText: 'Juan' }).locator('[data-more]').click();
+    assert.match(await page.textContent('#la-list [data-act="delete"]'), /Su devolución queda como un ingreso normal\./);
+    await page.click('#la-list [data-act="delete"]');
+    await page.click('#la-list [data-act="delete"]');
+    const juanBack = (await stored(page, 'ingresos-app-v1')).find((x) => x.id === 10);
+    assert.deepStrictEqual([juanBack.cat, 'loanId' in juanBack], ['Otros', false]);
+  });
+
+  await test('borrar desde Mis Gastos un préstamo perdido también quita su «no devuelto»', async (open) => {
+    const { page } = await open({ seed: { 'gastos-app-v1': [
+      mk(1, '2026-11-02', 100, 'Préstamo', 'Pepe'),
+      { ...mk(2, '2026-11-09', 100, 'Otro', 'Préstamo no devuelto: Pepe'), lostLoanId: 1 },
+      mk(3, '2026-11-03', 20, 'Alimentación', 'Pan'),
+    ] } });
+    await page.click('#tab-list');
+    assert.match(await page.textContent('#list'), /Préstamo no devuelto/);
+    const loanItem = page.locator('#list .expense-item').filter({ has: page.locator('.item-cat', { hasText: /^Préstamo$/ }) });
+    assert.match(await loanItem.textContent(), /✗ No devuelto/);
+    await loanItem.locator('.btn-action.del').click();
+    await page.click('#del-modal .modal-btn.confirm');
+    assert.deepStrictEqual((await stored(page, 'gastos-app-v1')).map((x) => x.detail), ['Pan']);
+  });
+
+  await test('el botón atrás cierra el menú ⋯ de un préstamo', async (open) => {
+    const { page } = await open({ seed: variosPrestamos, native: true });
+    await page.waitForFunction(() => !!window.__native.listeners['App:backButton']);
+    await goMode(page, 'prestamos');
+    await page.click('#loans-list [data-more]');
+    await pressBack(page);
+    assert.strictEqual(await page.locator('#loan-actions.show').count(), 0);
+  });
+
   await test('el botón atrás cierra la ventana de devolución', async (open) => {
     const { page } = await open({ seed: conPrestamo, native: true });
     await page.waitForFunction(() => !!window.__native.listeners['App:backButton']);

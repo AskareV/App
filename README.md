@@ -34,8 +34,11 @@ Mis Fijos y Mis Análisis.
 
 Préstamos: un préstamo es un gasto con `cat: "Préstamo"`, y cada devolución es un ingreso con
 `cat: "Devolución"` y `loanId` (el `id` del préstamo). Ninguno de los dos se suma a los
-gastos ni a los ingresos; el modo «Mis Préstamos» muestra cuánto falta de cada uno, y
-«Tengo en la cuenta» (Análisis → Histórico) sí los incluye.
+gastos ni a los ingresos; el modo «Mis Préstamos» muestra cuánto falta de cada uno (con
+filtros, búsqueda y orden), y
+«Tengo en la cuenta» (Análisis → Histórico) sí los incluye. «Ya no me lo devolverán» crea un
+gasto «Préstamo no devuelto» (categoría «Otro», con `lostLoanId`) por lo que faltaba: cuenta
+como gasto pero no cambia «Tengo en la cuenta», porque ese dinero ya salió con el préstamo.
 
 Fijos: cada uno se anota solo una vez al mes, el día `day` (el 31 pasa al último día en
 meses cortos), como un movimiento normal con `fixedId`, `fixedMonth` (`AAAA-MM`) y
