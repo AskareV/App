@@ -458,6 +458,13 @@ async function main() {
       [{ title: 'Yape', text: 'Recibiste Bs 120 de Carlos Mamani' }, 'ingresos', 120, 'De Carlos Mamani'],
       [{ title: 'Transferencia recibida', text: 'Te transfirieron Bs 1.500 desde la cuenta de PEDRO ROJAS' }, 'ingresos', 1500, 'De PEDRO ROJAS'],
       [{ title: '', text: 'Recibiste un pago QR de Bs 30 de Ana Flores' }, 'ingresos', 30, 'De Ana Flores'],
+      // Formatos reales: BMSC (recibido) y BNB (enviado). Nombre y cuenta inventados.
+      [{ title: 'Notificaciones', text: 'Recibio transferencia de la cuenta 1234567890 JUAN PEREZ AL BANCO NACIONAL DE BOLIVIA S.A., por Bs. 1.00 Concepto sin especificar' }, 'ingresos', 1, 'De JUAN PEREZ'],
+      [{ title: 'Notificaciones', text: 'Recibio transferencia de la cuenta 9876543210 MARIA DE LOS ANGELES ROJAS AL BANCO MERCANTIL SANTA CRUZ S.A., por Bs. 1,250.50 Concepto Alquiler' }, 'ingresos', 1250.5, 'De MARIA DE LOS ANGELES ROJAS'],
+      [{ title: 'Transferencia Interbancaria Simple', text: 'Tu transferencia de 1.00 bolivianos ha sido procesada' }, 'gastos', 1, 'Pago detectado'],
+      [{ title: 'Transferencia Interbancaria Simple', text: 'Tu transferencia de 2,350.75 bolivianos ha sido procesada' }, 'gastos', 2350.75, 'Pago detectado'],
+      [{ title: '', text: 'Transferiste Bs 80 a la cuenta 1234567 ROSA QUISPE' }, 'gastos', 80, 'Pago a ROSA QUISPE'],
+      [{ title: '', text: 'Te abonaron Bs 45 desde la cuenta ****5252 ANA ROJAS' }, 'ingresos', 45, 'De ANA ROJAS'],
     ];
     for (const [aviso, kind, amount, detail] of casos) {
       const r = await page.evaluate((a) => parsePaymentNotice(a), aviso);
@@ -585,6 +592,65 @@ async function main() {
     const card = page.locator('#review-list .rv-card', { hasText: 'Carlos Mamani' });
     assert.strictEqual(await card.locator('.rv-amount').textContent(), '+Bs. 120,00');
     assert.deepStrictEqual(await card.locator('.chip').allTextContents(), ['💼 Sueldos', '📋 Encuestas', '📦 Otros']);
+  });
+
+
+  // Pasar 1 Bs del BNB al BMSC: llegan los dos avisos casi a la vez (nombre y cuenta inventados)
+  const bnb = (id, monto, when) => ({ id, pkg: 'com.bnb.movil', app: 'BNB', title: 'Transferencia Interbancaria Simple', text: `Tu transferencia de ${monto} bolivianos ha sido procesada`, when: new Date(when).getTime() });
+  const bmsc = (id, monto, when) => ({ id, pkg: 'com.bmsc.movil', app: 'BMSC Movil', title: 'Notificaciones', text: `Recibio transferencia de la cuenta 1234567890 JUAN PEREZ AL BANCO NACIONAL DE BOLIVIA S.A., por Bs. ${monto} Concepto sin especificar`, when: new Date(when).getTime() });
+
+  await test('pasar dinero entre tus cuentas: se pregunta y, si confirmas, no se cuenta', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [bnb('n1', '1.00', '2026-11-12T10:16:00-04:00'), bmsc('n2', '1.00', '2026-11-12T10:16:20-04:00')] } });
+    await waitSynced(page);
+    await expectToast(page, /2 movimientos detectados/);
+    assert.strictEqual(await page.textContent('#review-bar-text'), '1 transferencia por revisar');
+    await page.click('#review-bar');
+    assert.strictEqual(await page.locator('#review-list .rv-card').count(), 1);
+    const card = page.locator('#review-list .rv-pair');
+    assert.match(await card.textContent(), /¿Pasaste dinero entre tus cuentas\?/);
+    assert.deepStrictEqual(await card.locator('.rv-amount').allTextContents(), ['−Bs. 1,00', '+Bs. 1,00']);
+    await card.locator('.rv-transfer').click();
+    await expectToast(page, /no se cuenta/);
+    assert.deepStrictEqual(await stored(page, 'gastos-app-v1'), []);
+    assert.deepStrictEqual(await stored(page, 'ingresos-app-v1'), []);
+    assert.strictEqual(await page.locator('#review-sheet.show').count(), 0);
+    assert.strictEqual(await page.locator('#review-bar.show').count(), 0);
+  });
+
+  await test('pasar dinero entre cuentas: "son distintos" los deja como un pago y un ingreso', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [bnb('n1', '50.00', '2026-11-12T10:16:00-04:00'), bmsc('n2', '50.00', '2026-11-12T10:18:00-04:00')] } });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    await page.click('#review-list .rv-unpair');
+    assert.strictEqual(await page.locator('#review-list .rv-pair').count(), 0);
+    assert.strictEqual(await page.locator('#review-list .rv-card').count(), 2);
+    assert.strictEqual(await page.textContent('#review-bar-text'), '2 movimientos por revisar');
+    // Aunque se vuelva a sincronizar, no se vuelven a juntar
+    await page.evaluate(() => linkTransfers());
+    await page.evaluate(() => closeReview());
+    await page.click('#review-bar');
+    assert.strictEqual(await page.locator('#review-list .rv-pair').count(), 0);
+    assert.strictEqual((await stored(page, 'gastos-app-v1'))[0].amount, 50);
+    assert.strictEqual((await stored(page, 'ingresos-app-v1'))[0].amount, 50);
+  });
+
+  await test('pasar dinero entre cuentas: se juntan aunque los avisos lleguen en momentos distintos', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [bnb('n1', '20.00', '2026-11-12T09:00:00-04:00')] } });
+    await waitSynced(page);
+    assert.strictEqual(await page.textContent('#review-bar-text'), '1 pago por revisar');
+    await page.evaluate((a) => { window.__native.captured.push(a); window.__native.listeners['PaymentCapture:captured']({}); }, bmsc('n2', '20.00', '2026-11-12T09:05:00-04:00'));
+    await page.waitForFunction(() => document.getElementById('review-bar-text').textContent === '1 transferencia por revisar');
+  });
+
+  await test('no se juntan si el monto es distinto o pasó mucho tiempo', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [
+      bnb('n1', '20.00', '2026-11-12T09:00:00-04:00'), bmsc('n2', '25.00', '2026-11-12T09:01:00-04:00'),
+      bnb('n3', '10.00', '2026-11-12T09:00:00-04:00'), bmsc('n4', '10.00', '2026-11-12T09:30:00-04:00'),
+    ] } });
+    await waitSynced(page);
+    assert.strictEqual(await page.textContent('#review-bar-text'), '4 movimientos por revisar');
+    await page.click('#review-bar');
+    assert.strictEqual(await page.locator('#review-list .rv-pair').count(), 0);
   });
 
   await test('si Android vuelve a entregar un aviso ya anotado, no se duplica', async (open) => {

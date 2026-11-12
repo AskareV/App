@@ -157,6 +157,10 @@
     .rv-cats{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0}
     .rv-card .btn-row{margin-top:12px}
     .rv-card .btn-secondary.armed{border-color:var(--danger);color:#f07070}
+    .rv-pair{border-color:var(--blue)}
+    .rv-pair-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
+    .rv-pair .rv-raw{margin-bottom:10px}
+    .rv-pair-note{font-size:12px;color:var(--text2);line-height:1.5;margin-top:2px}
     .capture-card{display:flex;align-items:center;gap:14px;background:var(--bg3);border:2px solid var(--border2);border-radius:var(--radius);padding:14px 16px;cursor:pointer;user-select:none}
     .capture-card:active{transform:scale(.98)}
     .capture-card .cc-icon{font-size:22px;flex-shrink:0}
@@ -1711,7 +1715,7 @@ function findAmount(norm) {
 }
 
 // Palabras que indican que el dinero salió / entró (sobre texto sin tildes y en minúsculas)
-const RE_MONEY_OUT = /(?<![a-z])(?:pagaste|transferiste|enviaste|compraste|retiraste|debito|debitado|debitada|debitamos|debitaron|compra|retiro|cargo)(?![a-z])/;
+const RE_MONEY_OUT = /(?<![a-z])(?:pagaste|transferiste|enviaste|compraste|retiraste|debito|debitado|debitada|debitamos|debitaron|compra|retiro|cargo|tu transferencia)(?![a-z])/;
 const RE_MONEY_IN = /(?<![a-z])(?:recibiste|recibio|recibido|recibida|te enviaron|te envio|te transfirieron|te transfirio|te pagaron|te pago|te depositaron|te deposito|te abonaron|abono|abonamos|abonado|abonada|acreditado|acreditada|acredito|acreditamos|acreditacion|deposito recibido)(?![a-z])/;
 
 const LETTER = 'A-Za-zÁÉÍÓÚÑÜáéíóúñü';
@@ -1720,9 +1724,15 @@ const NAME_SEQ = '(' + NAME_WORD + '(?:\\s+' + NAME_WORD + '){0,5})';
 const anyCase = words => words.flatMap(w => [w, w[0].toUpperCase() + w.slice(1), w.toUpperCase()]).join('|');
 const RE_PAID_TO = new RegExp('(?<![' + LETTER + '])(?:' + anyCase(['a', 'para', 'a favor de', 'en', 'destinatario', 'beneficiario', 'comercio']) + ')[:\\s]\\s*' + NAME_SEQ, 'g');
 const RE_PAID_BY = new RegExp('(?<![' + LETTER + '])(?:' + anyCase(['de', 'desde', 'remitente', 'ordenante']) + ')[:\\s]\\s*' + NAME_SEQ, 'g');
+// El titular escrito después del número de cuenta: "de la cuenta 1234567890 JUAN PEREZ AL BANCO…"
+// (de/desde = quien envía; a/para = quien recibe). El número puede venir tapado: "****5252".
+const ACCOUNT_NUMBER = '(?:cuenta|Cuenta|CUENTA|cta\\.?|Cta\\.?|CTA\\.?)\\s*(?:(?:n|N)(?:ro|RO)?[°ºoO.]?\\.?\\s*)?[\\dXx*][\\dXx*.-]{2,}\\s+';
+const RE_FROM_ACCOUNT = new RegExp('(?<![' + LETTER + '])(?:' + anyCase(['de', 'desde']) + ')\\s+(?:(?:' + anyCase(['la']) + ')\\s+)?' + ACCOUNT_NUMBER + NAME_SEQ, 'g');
+const RE_TO_ACCOUNT = new RegExp('(?<![' + LETTER + '])(?:' + anyCase(['a', 'para']) + ')\\s+(?:(?:' + anyCase(['la']) + ')\\s+)?' + ACCOUNT_NUMBER + NAME_SEQ, 'g');
 // Palabras donde termina un nombre ("JUAN PEREZ POR BS 50" → "JUAN PEREZ")
 const NAME_STOP = new Set(['por', 'bs', 'bob', 'usd', 'el', 'la', 'fecha', 'monto', 'importe', 'con', 'en', 'desde', 'ref', 'nro', 'cta', 'cuenta',
-  'hora', 'codigo', 'saldo', 'tu', 'su', 'operacion', 'qr', 'exitoso', 'exitosa', 'exitosamente', 'realizado', 'realizada', 'banco', 'pago', 'transferencia']);
+  'hora', 'codigo', 'saldo', 'tu', 'su', 'operacion', 'qr', 'exitoso', 'exitosa', 'exitosamente', 'realizado', 'realizada', 'banco', 'pago', 'transferencia',
+  'al', 'concepto', 'glosa', 'motivo']);
 
 function cleanName(raw) {
   const words = [];
@@ -1751,7 +1761,9 @@ function parsePaymentNotice(notice) {
   const amount = findAmount(norm);
   if (amount === null) return null;
   const incoming = !RE_MONEY_OUT.test(norm) && RE_MONEY_IN.test(norm);
-  const name = findName(incoming ? RE_PAID_BY : RE_PAID_TO, full);
+  const name = incoming
+    ? findName(RE_FROM_ACCOUNT, full) || findName(RE_PAID_BY, full)
+    : findName(RE_TO_ACCOUNT, full) || findName(RE_PAID_TO, full);
   const detail = incoming ? (name ? 'De ' + name : 'Ingreso detectado') : (name ? 'Pago a ' + name : 'Pago detectado');
   return { kind: incoming ? 'ingresos' : 'gastos', amount, detail };
 }
@@ -1777,6 +1789,7 @@ async function syncCaptured() {
     const log = readJSON(CAPTURE_LOG_KEY, []);
     const lists = {};
     let added = 0;
+    const addedKinds = new Set();
     for (const it of items) {
       if (doneSet.has(it.id)) continue;
       const parsed = parsePaymentNotice(it);
@@ -1789,20 +1802,25 @@ async function syncCaptured() {
           cat: parsed.kind === 'gastos' ? 'Otro' : 'Otros',
           date: ymd(new Date(it.when)) + 'T12:00:00',
           pending: true,
-          auto: { app, text: [it.title, it.text].filter(Boolean).join(' — ').slice(0, 400) },
+          auto: { app, when: it.when, text: [it.title, it.text].filter(Boolean).join(' — ').slice(0, 400) },
         });
         added++;
+        addedKinds.add(parsed.kind);
       }
       doneSet.add(it.id); done.push(it.id);
     }
     // Primero se guarda todo aquí y solo después se le dice a Android que ya puede olvidarlos
     for (const kind of Object.keys(lists)) localStorage.setItem(DATA_KEYS[kind], JSON.stringify(lists[kind]));
+    if (added) linkTransfers();
     localStorage.setItem(CAPTURE_DONE_KEY, JSON.stringify(done.slice(-500)));
     localStorage.setItem(CAPTURE_LOG_KEY, JSON.stringify(log.slice(0, CAPTURE_LOG_MAX)));
     await Native.PaymentCapture.removeCaptured({ ids: items.map(i => i.id) });
     if (added) {
       refreshAfterDataChange();
-      toast('🔔 ' + plural(added, 'pago detectado', 'pagos detectados'));
+      const kinds = [...addedKinds];
+      toast('🔔 ' + (kinds.length > 1 ? plural(added, 'movimiento detectado', 'movimientos detectados')
+        : kinds[0] === 'ingresos' ? plural(added, 'ingreso detectado', 'ingresos detectados')
+        : plural(added, 'pago detectado', 'pagos detectados')));
     }
     if (isShown('capture-sheet')) renderCapture();
   } catch (e) {
@@ -1818,23 +1836,82 @@ function pendingEntries() {
   for (const kind of ['gastos', 'ingresos']) {
     for (const e of readList(DATA_KEYS[kind])) if (e && e.pending) out.push({ kind, e });
   }
-  out.sort((a, b) => String(b.e.date).localeCompare(String(a.e.date)) || b.e.id - a.e.id);
+  // Lo más reciente primero (por la hora del aviso si la hay)
+  const time = e => (e.auto && Number.isFinite(e.auto.when) ? e.auto.when : Date.parse(e.date)) || 0;
+  out.sort((a, b) => time(b.e) - time(a.e) || b.e.id - a.e.id);
   return out;
 }
-function updateReviewBar() {
+// Cuando pasas dinero entre dos cuentas tuyas llegan dos avisos: la salida de un banco y la
+// entrada en el otro. No es un gasto ni un ingreso. Un pago y un ingreso detectados del mismo
+// monto con pocos minutos de diferencia se juntan para preguntar si fue eso.
+const TRANSFER_WINDOW_MS = 15 * 60 * 1000;
+function linkTransfers() {
+  const gastos = readList(DATA_KEYS.gastos), ingresos = readList(DATA_KEYS.ingresos);
+  const free = e => e && e.pending && e.auto && Number.isFinite(e.auto.when) && e.pairWith == null && !e.notPair;
+  const candidates = ingresos.filter(free);
+  let changed = false;
+  for (const g of gastos.filter(free)) {
+    let best = null;
+    for (const i of candidates) {
+      if (i.pairWith != null || Math.abs(i.amount - g.amount) >= 0.005) continue;
+      const gap = Math.abs(i.auto.when - g.auto.when);
+      if (gap <= TRANSFER_WINDOW_MS && (!best || gap < Math.abs(best.auto.when - g.auto.when))) best = i;
+    }
+    if (best) { g.pairWith = best.id; best.pairWith = g.id; changed = true; }
+  }
+  if (changed) {
+    localStorage.setItem(DATA_KEYS.gastos, JSON.stringify(gastos));
+    localStorage.setItem(DATA_KEYS.ingresos, JSON.stringify(ingresos));
+  }
+}
+// Lo que hay por revisar, agrupado: {type:'single', kind, e} o {type:'pair', g, i}
+function reviewCards() {
   const items = pendingEntries();
-  const n = items.length;
-  const soloPagos = items.every(i => i.kind === 'gastos');
+  const ingresoById = new Map(items.filter(x => x.kind === 'ingresos').map(x => [x.e.id, x.e]));
+  const used = new Set();
+  const cards = [];
+  for (const { kind, e } of items) {
+    if (kind === 'ingresos' && used.has(e.id)) continue;
+    const partner = kind === 'gastos' && e.pairWith != null ? ingresoById.get(e.pairWith) : null;
+    if (partner && partner.pairWith === e.id) { used.add(partner.id); cards.push({ type: 'pair', g: e, i: partner }); }
+    else if (kind === 'ingresos' && e.pairWith != null && items.some(x => x.kind === 'gastos' && x.e.id === e.pairWith && x.e.pairWith === e.id)) continue;
+    else cards.push({ type: 'single', kind, e });
+  }
+  return cards;
+}
+function updateReviewBar() {
+  const cards = reviewCards();
+  const n = cards.length;
+  const word = cards.every(c => c.type === 'pair') ? ['transferencia', 'transferencias']
+    : cards.every(c => c.type === 'single' && c.kind === 'gastos') ? ['pago', 'pagos'] : ['movimiento', 'movimientos'];
   document.getElementById('review-bar').classList.toggle('show', n > 0);
-  document.getElementById('review-bar-text').textContent =
-    (soloPagos ? plural(n, 'pago', 'pagos') : plural(n, 'movimiento', 'movimientos')) + ' por revisar';
+  document.getElementById('review-bar-text').textContent = plural(n, word[0], word[1]) + ' por revisar';
+}
+function pairCardHtml(g, i) {
+  const side = (e, income) => `
+    <div class="rv-top">
+      <span class="rv-amount${income ? ' in' : ''}">${income ? '+' : '−'}${fmtMoney(e.amount)}</span>
+      <span class="rv-meta">${income ? 'Entró' : 'Salió'}${e.auto.app ? ' · ' + esc(e.auto.app) : ''} · ${fmtDate(e.date)}</span>
+    </div>
+    ${e.auto.text ? `<div class="rv-raw">${esc(e.auto.text)}</div>` : ''}`;
+  return `<div class="rv-card rv-pair" data-gasto="${g.id}" data-ingreso="${i.id}">
+    <div class="rv-pair-title">🔁 ¿Pasaste dinero entre tus cuentas?</div>
+    ${side(g, false)}${side(i, true)}
+    <div class="rv-pair-note">Llegaron dos avisos por el mismo monto casi a la vez: una salida y una entrada. Si moviste dinero de una cuenta tuya a otra, no es un gasto ni un ingreso, y no se cuenta.</div>
+    <div class="btn-row">
+      <button class="btn-secondary show rv-unpair">Son distintos</button>
+      <button class="btn-primary rv-transfer">Sí, no contarlo</button>
+    </div>
+  </div>`;
 }
 function openReview() {
-  const items = pendingEntries();
-  if (!items.length) return;
+  const cards = reviewCards();
+  if (!cards.length) { closeReview(); return; }
   document.getElementById('review-list').innerHTML =
     '<div class="sheet-note">Se anotaron solos a partir de los avisos de tu banco. Ponles nombre y categoría, o descártalos si no corresponden.</div>' +
-    items.map(({ kind, e }) => {
+    cards.map(card => {
+      if (card.type === 'pair') return pairCardHtml(card.g, card.i);
+      const { kind, e } = card;
       const income = kind === 'ingresos';
       const chips = Object.entries(MODES[kind].cats).map(([name, meta]) =>
         `<div class="chip${name === e.cat ? ' active' : ''}" data-cat="${esc(name)}">${meta.icon} ${esc(name)}</div>`).join('');
@@ -1874,6 +1951,23 @@ function finishReviewCard(card, message) {
 document.getElementById('review-list').addEventListener('click', ev => {
   const card = ev.target.closest('.rv-card');
   if (!card) return;
+  if (card.classList.contains('rv-pair')) {
+    const g = Number(card.dataset.gasto), i = Number(card.dataset.ingreso);
+    if (ev.target.closest('.rv-transfer')) {
+      // Movimiento entre cuentas propias: ni gasto ni ingreso, se quitan los dos
+      updateStoredEntry('gastos', g, () => null);
+      updateStoredEntry('ingresos', i, () => null);
+      finishReviewCard(card, '✓ Transferencia entre tus cuentas: no se cuenta');
+    } else if (ev.target.closest('.rv-unpair')) {
+      // Eran dos movimientos distintos: se revisan por separado y no se vuelven a juntar
+      const apart = e => { const { pairWith, ...rest } = e; return { ...rest, notPair: true }; };
+      updateStoredEntry('gastos', g, apart);
+      updateStoredEntry('ingresos', i, apart);
+      refreshAfterDataChange();
+      openReview();
+    }
+    return;
+  }
   const kind = card.dataset.kind, id = Number(card.dataset.id);
   const chip = ev.target.closest('.chip');
   if (chip) {
