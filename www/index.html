@@ -84,8 +84,9 @@
     .list-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center}
     .search-wrap{position:relative;flex:1;display:flex;align-items:center}
     .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none;z-index:1}
-    .search-wrap input{width:100%;padding-left:34px!important;font-size:14px}
-    .list-controls select{width:auto;min-width:90px;font-size:13px;padding:10px 30px 10px 11px}
+    .search-wrap input{width:100%;min-width:0;padding:10px 11px 10px 34px;font-size:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);outline:none;transition:border-color .15s}
+    .search-wrap input:focus{border-color:var(--accent)}
+    .list-controls .csel-trigger{width:auto;flex-shrink:0}
     .expense-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px;transition:border-color .15s}
     .expense-item.highlighted{border-color:var(--blue)}
     .item-top{display:flex;align-items:flex-start;gap:10px}
@@ -129,6 +130,62 @@
     .backup-btn:active{transform:scale(.97);background:var(--bg2)}
     .backup-note{font-size:11px;color:var(--text2);line-height:1.5;margin-top:10px}
     .app-version{font-size:10px;color:var(--text3);font-family:var(--mono);text-align:center;margin-top:14px}
+
+    /* Pagos detectados: barra de aviso, etiqueta y hojas */
+    .review-bar{display:none;align-items:center;gap:8px;background:var(--blue-dim);border-bottom:1px solid var(--blue);color:var(--blue-text);font-size:13px;font-weight:500;padding:10px 16px 10px 20px;cursor:pointer;flex-shrink:0;user-select:none}
+    .review-bar.show{display:flex}
+    .review-bar .rb-go{margin-left:auto;font-size:18px;line-height:1}
+    .tag-pending{font-size:10px;font-weight:600;color:var(--blue-text);background:var(--blue-dim);border:1px solid var(--blue);border-radius:10px;padding:1px 7px;white-space:nowrap}
+    .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:150;display:none;align-items:flex-end;justify-content:center}
+    .sheet-overlay.show{display:flex}
+    .sheet-overlay.top{z-index:210}
+    .sheet{background:var(--bg2);border:1px solid var(--border2);border-bottom:none;border-radius:16px 16px 0 0;width:100%;max-width:480px;max-height:90dvh;display:flex;flex-direction:column;animation:slideUp .22s ease}
+    .sheet-head{display:flex;align-items:center;gap:10px;padding:16px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+    .sheet-title{flex:1;font-size:15px;font-weight:600;color:var(--text)}
+    .sheet-close{background:none;border:none;color:var(--text2);font-size:13px;font-family:var(--font);cursor:pointer;padding:6px 0 6px 12px}
+    .sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:14px 16px 28px}
+    .sheet-note{font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:14px}
+    .rv-card{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+    .rv-top{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+    .rv-amount{font-size:19px;font-weight:600;font-family:var(--mono);letter-spacing:-.5px;color:var(--accent-text)}
+    .rv-amount.in{color:#6fcf8a}
+    .rv-meta{margin-left:auto;font-size:11px;color:var(--text3);font-family:var(--mono);text-align:right}
+    .rv-raw{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:5.4em;overflow:hidden}
+    .rv-card .field input{background:var(--bg2)}
+    .rv-cats{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0}
+    .rv-card .btn-row{margin-top:12px}
+    .rv-card .btn-secondary.armed{border-color:var(--danger);color:#f07070}
+    .capture-card{display:flex;align-items:center;gap:14px;background:var(--bg3);border:2px solid var(--border2);border-radius:var(--radius);padding:14px 16px;cursor:pointer;user-select:none}
+    .capture-card:active{transform:scale(.98)}
+    .capture-card .cc-icon{font-size:22px;flex-shrink:0}
+    .capture-card .cc-text{flex:1;min-width:0}
+    .capture-card .cc-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
+    .capture-card .cc-desc{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .capture-card .cc-go{color:var(--text3);font-size:18px}
+    .capture-card.on{border-color:#4caf72}
+    .step{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+    .step-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px}
+    .step-desc{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px}
+    .step-status{font-size:12px;font-weight:600;margin-bottom:10px}
+    .step-status.ok{color:#6fcf8a}
+    .step-status.no{color:#f5a742}
+    .step-help{font-size:11px;color:var(--text2);line-height:1.55;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+    .step-btn{width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:var(--font)}
+    .step-btn:active{background:var(--bg)}
+    .step-btn.link{margin-top:8px;font-weight:500;color:var(--text2)}
+    .app-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+    .app-chip{display:flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid #4caf72;color:#6fcf8a;background:#0f2015}
+    .app-chip button{background:none;border:none;color:inherit;font-size:13px;cursor:pointer;padding:0 6px;font-family:var(--font)}
+    .log-item{padding:10px 0;border-bottom:1px solid var(--border)}
+    .log-item:last-child{border-bottom:none}
+    .log-head{display:flex;gap:8px;font-size:11px;color:var(--text3);font-family:var(--mono);margin-bottom:3px}
+    .log-result{margin-left:auto;font-weight:600}
+    .log-result.ok{color:#6fcf8a}
+    .log-result.no{color:var(--text3)}
+    .log-text{font-size:12px;color:var(--text2);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+    .picker-search{padding:12px 16px 8px;flex-shrink:0}
+    .picker-search input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:15px;padding:11px 13px;outline:none}
+    .picker-list{overflow-y:auto;overscroll-behavior:contain;padding:0 0 28px}
 
     /* Mode cards */
     .settings-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:14px}
@@ -271,6 +328,10 @@
     <div class="tab active" onclick="showAnTab('config')" id="antab-config">⚙️ Config</div>
     <div class="tab" onclick="showAnTab('chart')" id="antab-chart">📊 Gráfico</div>
     <div class="tab" onclick="showAnTab('hist')" id="antab-hist">📅 Histórico</div>
+  </div>
+
+  <div class="review-bar" id="review-bar" onclick="openReview()">
+    <span>🔔</span><span id="review-bar-text">Pagos por revisar</span><span class="rb-go">›</span>
   </div>
 
   <!-- TAB: AGREGAR -->
@@ -488,6 +549,17 @@
         </div>
       </div>
     </div>
+    <div id="capture-section" style="display:none">
+      <div class="settings-title spaced">Pagos automáticos</div>
+      <div class="capture-card" id="capture-card" onclick="openCapture()">
+        <div class="cc-icon">🔔</div>
+        <div class="cc-text">
+          <div class="cc-name">Detectar pagos del banco</div>
+          <div class="cc-desc" id="capture-summary">Desactivado</div>
+        </div>
+        <div class="cc-go">›</div>
+      </div>
+    </div>
     <div class="settings-title spaced">Copia de seguridad</div>
     <div class="backup-row">
       <button class="backup-btn" id="btn-export" onclick="exportData()">📤 Exportar</button>
@@ -520,6 +592,40 @@
       <button class="modal-btn cancel" onclick="closeModal()">Cancelar</button>
       <button class="modal-btn confirm" onclick="confirmDelete()">Sí, eliminar</button>
     </div>
+  </div>
+</div>
+
+<!-- Pagos por revisar -->
+<div class="sheet-overlay" id="review-sheet" onclick="if(event.target===this)closeReview()">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div class="sheet-title">Por revisar</div>
+      <button class="sheet-close" onclick="closeReview()">Cerrar</button>
+    </div>
+    <div class="sheet-body" id="review-list"></div>
+  </div>
+</div>
+
+<!-- Configurar la detección de pagos -->
+<div class="sheet-overlay" id="capture-sheet" onclick="if(event.target===this)closeCapture()">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div class="sheet-title">Detectar pagos del banco</div>
+      <button class="sheet-close" onclick="closeCapture()">Cerrar</button>
+    </div>
+    <div class="sheet-body" id="capture-body"></div>
+  </div>
+</div>
+
+<!-- Elegir app del banco -->
+<div class="sheet-overlay top" id="picker-sheet" onclick="if(event.target===this)closePicker()">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div class="sheet-title">¿Qué app te avisa de tus pagos?</div>
+      <button class="sheet-close" onclick="closePicker()">Listo</button>
+    </div>
+    <div class="picker-search"><input type="text" id="picker-search" placeholder="Buscar app..." oninput="renderPicker()"></div>
+    <div class="picker-list" id="picker-list"></div>
   </div>
 </div>
 
@@ -1093,6 +1199,7 @@ function load() {
 }
 function save() {
   try { localStorage.setItem(currentMode.storageKey, JSON.stringify(expenses)); } catch(e){}
+  updateReviewBar();
 }
 
 // ── HELPERS ──────────────────────────────────────────
@@ -1104,10 +1211,10 @@ function toast(msg) {
 function fmtDate(iso){ return new Date(iso).toLocaleDateString('es-BO',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 function fmtMoney(n){ return 'Bs. '+n.toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Fecha de hoy según la hora del teléfono (no en UTC, que de noche ya es "mañana")
-function todayISO(){
-  const d=new Date();
+function ymd(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+function todayISO(){ return ymd(new Date()); }
 const ESC_MAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 function esc(s){ return String(s).replace(/[&<>"']/g,c=>ESC_MAP[c]); }
 
@@ -1129,7 +1236,7 @@ function submitForm() {
   if(!detail){toast(`⚠ Escribe el detalle del ${currentMode.noun}`);return;}
   if(editingId!==null){
     const idx=expenses.findIndex(e=>e.id===editingId);
-    if(idx!==-1) expenses[idx]={...expenses[idx],amount,detail,cat,date:dateVal+'T12:00:00'};
+    if(idx!==-1){ const {pending, ...rest}=expenses[idx]; expenses[idx]={...rest,amount,detail,cat,date:dateVal+'T12:00:00'}; }
     toast(`✓ ${cap(currentMode.noun)} actualizado`);
     cancelEdit();
   } else {
@@ -1318,7 +1425,7 @@ function renderList(){
         <div class="cat-icon" style="background:${m.bg}">${m.icon}</div>
         <div class="item-info">
           <div class="item-detail" title="${esc(e.detail)}">${esc(e.detail)}</div>
-          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span></div>
+          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span>${e.pending?'<span class="tag-pending">Por revisar</span>':''}</div>
         </div>
         <div class="item-amount">${fmtMoney(e.amount)}</div>
       </div>
@@ -1339,6 +1446,7 @@ const Native = (() => {
     App: X.registerPlugin('App'),
     Filesystem: X.registerPlugin('Filesystem'),
     Share: X.registerPlugin('Share'),
+    PaymentCapture: X.registerPlugin('PaymentCapture'),
   };
 })();
 
@@ -1348,7 +1456,10 @@ function isVisible(id){ return document.getElementById(id).style.display !== 'no
 // Botón "atrás" de Android: cierra lo que esté abierto, vuelve a la primera pestaña y,
 // si ya no queda nada, deja la app en segundo plano.
 function handleBack() {
+  if (isShown('picker-sheet')) { closePicker(); return true; }
   if (isShown('csel-overlay')) { document.getElementById('csel-overlay').classList.remove('show'); activeCsel = null; return true; }
+  if (isShown('capture-sheet')) { closeCapture(); return true; }
+  if (isShown('review-sheet')) { closeReview(); return true; }
   if (isShown('import-modal')) { closeImportModal(); return true; }
   if (isShown('del-modal')) { closeModal(); return true; }
   if (isShown('settings-modal')) { closeSettings(); return true; }
@@ -1432,7 +1543,7 @@ function cleanEntry(e) {
   let day;
   const m = /^(\d{4}-\d{2}-\d{2})/.exec(e.date);
   if (m) day = m[1];
-  else { const d = new Date(e.date); day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  else day = ymd(new Date(e.date));
   const id = Number(e.id);
   return {
     ...e,
@@ -1522,12 +1633,13 @@ function confirmImport() {
     // Las metas de la copia solo se usan si aquí todavía no se guardó ninguna
     if (plan.pcts && !readSavedPcts()) localStorage.setItem(PCTS_KEY, JSON.stringify(plan.pcts));
   } catch (e) { toast('⚠ No se pudo guardar la copia'); return; }
+  loadPcts();
   refreshAfterDataChange();
   toast('✓ ' + plural(plan.gastos.nuevos.length + plan.ingresos.nuevos.length, 'movimiento importado', 'movimientos importados'));
 }
 // Vuelve a pintar lo que esté en pantalla después de cambiar los datos guardados.
 function refreshAfterDataChange() {
-  loadPcts();
+  updateReviewBar();
   if (currentModeKey === 'analisis') {
     if (isVisible('view-analisis-chart')) renderChart();
     if (isVisible('view-analisis-hist')) renderHistorico();
@@ -1537,12 +1649,399 @@ function refreshAfterDataChange() {
   }
 }
 
+// ── PAGOS DETECTADOS ─────────────────────────────────
+// La app Android puede leer los avisos del banco (si el usuario lo activa). Aquí cada aviso
+// se convierte en un movimiento "por revisar": el monto y la fecha ya vienen puestos,
+// y el usuario solo le pone nombre y categoría.
+
+const CAPTURE_APPS_KEY = 'capture-apps';   // apps elegidas: [{pkg, label}]
+const CAPTURE_DONE_KEY = 'capture-done';   // avisos ya convertidos (para no duplicar si algo falla a medias)
+const CAPTURE_LOG_KEY = 'capture-log';     // últimos avisos leídos, para ver qué entendió la app
+const CAPTURE_LOG_MAX = 30;
+
+function readJSON(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; } catch (e) { return fallback; }
+}
+function normalizeText(s) { return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+
+// "1.234,50", "1,234.50", "50" o "50,5" → número
+function parseMoney(token) {
+  let s = token;
+  const dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
+  if (dot >= 0 && comma >= 0) {
+    // Con los dos signos, el último es el de los decimales
+    const dec = dot > comma ? '.' : ',';
+    s = s.split(dec === '.' ? ',' : '.').join('').replace(dec, '.');
+  } else if (dot >= 0 || comma >= 0) {
+    const parts = s.split(dot >= 0 ? '.' : ',');
+    const last = parts[parts.length - 1];
+    // Un signo seguido de 3 cifras separa miles (1.500); con 1 o 2 cifras, decimales (1.50)
+    if (last.length === 3 && parts[0] !== '0') s = parts.join('');
+    else s = parts.slice(0, -1).join('') + '.' + last;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 && n < 1e8 ? Math.round(n * 100) / 100 : null;
+}
+
+const AMOUNT_TOKEN = '(\\d[\\d.,]*\\d|\\d)';
+// "Bs 50", "Bs. 50,00", "BOB 50"; no vale si lo que sigue parece una fecha u hora
+const RE_AMOUNT_BEFORE = new RegExp('(?<![a-z0-9])(?:bs|bob)\\.?\\s*[:.-]?\\s*' + AMOUNT_TOKEN + '(?![\\d/:]|-\\d)', 'g');
+// "50 Bs", "50,00 bolivianos"
+const RE_AMOUNT_AFTER = new RegExp('(?<![\\d/:.,a-z-])' + AMOUNT_TOKEN + '\\s*(?:bs|bob|bolivianos)(?![a-z0-9])', 'g');
+// Números que no son el monto pagado: saldos, números de operación, cuentas…
+const RE_NOT_THE_AMOUNT = new RegExp(
+  '(?<![a-z])(?:saldo|disponible|nro|n°|nº|num|numero|operacion|codigo|cod|cuenta|cta|ref|referencia|comprobante|transaccion|tarjeta|celular|telefono|nit)' +
+  '(?:[^a-z0-9]+(?:es|de|actual|disponible|total|final|en|su|tu|cuenta)){0,3}[^a-z0-9]*(?:(?:bs|bob)\\.?\\s*[:.-]?\\s*)?$'
+);
+
+// Busca el monto en bolivianos dentro de un texto ya normalizado; null si no hay.
+function findAmount(norm) {
+  const found = [];
+  for (const m of norm.matchAll(RE_AMOUNT_BEFORE)) found.push({ at: m.index + m[0].length - m[1].length, token: m[1] });
+  for (const m of norm.matchAll(RE_AMOUNT_AFTER)) found.push({ at: m.index, token: m[1] });
+  found.sort((a, b) => a.at - b.at);
+  for (const f of found) {
+    if (RE_NOT_THE_AMOUNT.test(norm.slice(Math.max(0, f.at - 40), f.at))) continue;
+    const value = parseMoney(f.token);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+// Palabras que indican que el dinero salió / entró (sobre texto sin tildes y en minúsculas)
+const RE_MONEY_OUT = /(?<![a-z])(?:pagaste|transferiste|enviaste|compraste|retiraste|debito|debitado|debitada|debitamos|debitaron|compra|retiro|cargo)(?![a-z])/;
+const RE_MONEY_IN = /(?<![a-z])(?:recibiste|recibio|recibido|recibida|te enviaron|te envio|te transfirieron|te transfirio|te pagaron|te pago|te depositaron|te deposito|te abonaron|abono|abonamos|abonado|abonada|acreditado|acreditada|acredito|acreditamos|acreditacion|deposito recibido)(?![a-z])/;
+
+const LETTER = 'A-Za-zÁÉÍÓÚÑÜáéíóúñü';
+const NAME_WORD = "[A-ZÁÉÍÓÚÑÜ][" + LETTER + "0-9.&'’-]*";
+const NAME_SEQ = '(' + NAME_WORD + '(?:\\s+' + NAME_WORD + '){0,5})';
+const anyCase = words => words.flatMap(w => [w, w[0].toUpperCase() + w.slice(1), w.toUpperCase()]).join('|');
+const RE_PAID_TO = new RegExp('(?<![' + LETTER + '])(?:' + anyCase(['a', 'para', 'a favor de', 'en', 'destinatario', 'beneficiario', 'comercio']) + ')[:\\s]\\s*' + NAME_SEQ, 'g');
+const RE_PAID_BY = new RegExp('(?<![' + LETTER + '])(?:' + anyCase(['de', 'desde', 'remitente', 'ordenante']) + ')[:\\s]\\s*' + NAME_SEQ, 'g');
+// Palabras donde termina un nombre ("JUAN PEREZ POR BS 50" → "JUAN PEREZ")
+const NAME_STOP = new Set(['por', 'bs', 'bob', 'usd', 'el', 'la', 'fecha', 'monto', 'importe', 'con', 'en', 'desde', 'ref', 'nro', 'cta', 'cuenta',
+  'hora', 'codigo', 'saldo', 'tu', 'su', 'operacion', 'qr', 'exitoso', 'exitosa', 'exitosamente', 'realizado', 'realizada', 'banco', 'pago', 'transferencia']);
+
+function cleanName(raw) {
+  const words = [];
+  for (const w of raw.split(/\s+/)) {
+    const word = w.replace(/[.,;:]+$/, '');
+    if (!word || NAME_STOP.has(normalizeText(word))) break;
+    words.push(word);
+    if (word !== w) break; // tras un punto o una coma el nombre ya terminó
+  }
+  const name = words.join(' ').slice(0, 40).trim();
+  return name.length >= 2 ? name : null;
+}
+// Primer nombre válido que siga a una de esas palabras ("de Bs 30 de Ana Flores" → "Ana Flores")
+function findName(re, text) {
+  for (const m of text.matchAll(re)) {
+    const name = cleanName(m[1]);
+    if (name) return name;
+  }
+  return null;
+}
+
+// Interpreta un aviso {title, text}. Devuelve {kind, amount, detail} o null si no trae un monto en Bs.
+function parsePaymentNotice(notice) {
+  const full = [notice.title, notice.text].filter(Boolean).join('\n');
+  const norm = normalizeText(full);
+  const amount = findAmount(norm);
+  if (amount === null) return null;
+  const incoming = !RE_MONEY_OUT.test(norm) && RE_MONEY_IN.test(norm);
+  const name = findName(incoming ? RE_PAID_BY : RE_PAID_TO, full);
+  const detail = incoming ? (name ? 'De ' + name : 'Ingreso detectado') : (name ? 'Pago a ' + name : 'Pago detectado');
+  return { kind: incoming ? 'ingresos' : 'gastos', amount, detail };
+}
+
+function newEntryId(list) {
+  const ids = new Set(list.map(e => e.id));
+  let id = Date.now();
+  while (ids.has(id)) id++;
+  return id;
+}
+
+// Recoge los avisos que capturó Android y los convierte en movimientos por revisar.
+let syncingCaptured = false;
+async function syncCaptured() {
+  if (!Native || syncingCaptured) return;
+  syncingCaptured = true;
+  try {
+    const res = await Native.PaymentCapture.getCaptured();
+    const items = (res && res.items) || [];
+    if (!items.length) return;
+    const done = readJSON(CAPTURE_DONE_KEY, []);
+    const doneSet = new Set(done);
+    const log = readJSON(CAPTURE_LOG_KEY, []);
+    const lists = {};
+    let added = 0;
+    for (const it of items) {
+      if (doneSet.has(it.id)) continue;
+      const parsed = parsePaymentNotice(it);
+      const app = it.app || it.pkg || '';
+      log.unshift({ when: it.when, app, title: it.title || '', text: it.text || '', result: parsed ? { kind: parsed.kind, amount: parsed.amount } : null });
+      if (parsed) {
+        const list = lists[parsed.kind] || (lists[parsed.kind] = readList(DATA_KEYS[parsed.kind]));
+        list.unshift({
+          id: newEntryId(list), amount: parsed.amount, detail: parsed.detail,
+          cat: parsed.kind === 'gastos' ? 'Otro' : 'Otros',
+          date: ymd(new Date(it.when)) + 'T12:00:00',
+          pending: true,
+          auto: { app, text: [it.title, it.text].filter(Boolean).join(' — ').slice(0, 400) },
+        });
+        added++;
+      }
+      doneSet.add(it.id); done.push(it.id);
+    }
+    // Primero se guarda todo aquí y solo después se le dice a Android que ya puede olvidarlos
+    for (const kind of Object.keys(lists)) localStorage.setItem(DATA_KEYS[kind], JSON.stringify(lists[kind]));
+    localStorage.setItem(CAPTURE_DONE_KEY, JSON.stringify(done.slice(-500)));
+    localStorage.setItem(CAPTURE_LOG_KEY, JSON.stringify(log.slice(0, CAPTURE_LOG_MAX)));
+    await Native.PaymentCapture.removeCaptured({ ids: items.map(i => i.id) });
+    if (added) {
+      refreshAfterDataChange();
+      toast('🔔 ' + plural(added, 'pago detectado', 'pagos detectados'));
+    }
+    if (isShown('capture-sheet')) renderCapture();
+  } catch (e) {
+    // Si algo falla, los avisos siguen guardados en Android y se reintenta la próxima vez
+  } finally {
+    syncingCaptured = false;
+  }
+}
+
+// ── Por revisar ──────────────────────────────────────
+function pendingEntries() {
+  const out = [];
+  for (const kind of ['gastos', 'ingresos']) {
+    for (const e of readList(DATA_KEYS[kind])) if (e && e.pending) out.push({ kind, e });
+  }
+  out.sort((a, b) => String(b.e.date).localeCompare(String(a.e.date)) || b.e.id - a.e.id);
+  return out;
+}
+function updateReviewBar() {
+  const items = pendingEntries();
+  const n = items.length;
+  const soloPagos = items.every(i => i.kind === 'gastos');
+  document.getElementById('review-bar').classList.toggle('show', n > 0);
+  document.getElementById('review-bar-text').textContent =
+    (soloPagos ? plural(n, 'pago', 'pagos') : plural(n, 'movimiento', 'movimientos')) + ' por revisar';
+}
+function openReview() {
+  const items = pendingEntries();
+  if (!items.length) return;
+  document.getElementById('review-list').innerHTML =
+    '<div class="sheet-note">Se anotaron solos a partir de los avisos de tu banco. Ponles nombre y categoría, o descártalos si no corresponden.</div>' +
+    items.map(({ kind, e }) => {
+      const income = kind === 'ingresos';
+      const chips = Object.entries(MODES[kind].cats).map(([name, meta]) =>
+        `<div class="chip${name === e.cat ? ' active' : ''}" data-cat="${esc(name)}">${meta.icon} ${esc(name)}</div>`).join('');
+      return `<div class="rv-card" data-kind="${kind}" data-id="${e.id}" data-cat="${esc(e.cat)}">
+        <div class="rv-top">
+          <span class="rv-amount${income ? ' in' : ''}">${income ? '+' : ''}${fmtMoney(e.amount)}</span>
+          <span class="rv-meta">${fmtDate(e.date)}${e.auto && e.auto.app ? ' · ' + esc(e.auto.app) : ''}</span>
+        </div>
+        ${e.auto && e.auto.text ? `<div class="rv-raw">${esc(e.auto.text)}</div>` : ''}
+        <div class="field"><label>Nombre</label><input type="text" class="rv-name" value="${esc(e.detail)}" maxlength="200" autocomplete="off"></div>
+        <div class="rv-cats">${chips}</div>
+        <div class="btn-row">
+          <button class="btn-secondary show rv-discard">Descartar</button>
+          <button class="btn-primary rv-save">Guardar</button>
+        </div>
+      </div>`;
+    }).join('');
+  document.getElementById('review-sheet').classList.add('show');
+}
+function closeReview() { document.getElementById('review-sheet').classList.remove('show'); }
+
+// Cambia (o borra, si fn devuelve null) un movimiento directamente en lo guardado.
+function updateStoredEntry(kind, id, fn) {
+  const list = readList(DATA_KEYS[kind]);
+  const idx = list.findIndex(e => e.id === id);
+  if (idx === -1) return;
+  const next = fn(list[idx]);
+  if (next) list[idx] = next; else list.splice(idx, 1);
+  localStorage.setItem(DATA_KEYS[kind], JSON.stringify(list));
+}
+function finishReviewCard(card, message) {
+  card.remove();
+  refreshAfterDataChange();
+  toast(message);
+  if (!document.querySelector('#review-list .rv-card')) closeReview();
+}
+document.getElementById('review-list').addEventListener('click', ev => {
+  const card = ev.target.closest('.rv-card');
+  if (!card) return;
+  const kind = card.dataset.kind, id = Number(card.dataset.id);
+  const chip = ev.target.closest('.chip');
+  if (chip) {
+    card.dataset.cat = chip.dataset.cat;
+    card.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+    return;
+  }
+  if (ev.target.closest('.rv-save')) {
+    const name = card.querySelector('.rv-name').value.trim();
+    if (!name) { toast('⚠ Ponle un nombre'); return; }
+    updateStoredEntry(kind, id, e => { const { pending, ...rest } = e; return { ...rest, detail: name, cat: card.dataset.cat }; });
+    finishReviewCard(card, '✓ Guardado');
+    return;
+  }
+  const discard = ev.target.closest('.rv-discard');
+  if (discard) {
+    // Descartar borra el movimiento: pide un segundo toque para confirmar
+    if (!discard.classList.contains('armed')) {
+      discard.classList.add('armed'); discard.textContent = '¿Descartar?';
+      setTimeout(() => { discard.classList.remove('armed'); discard.textContent = 'Descartar'; }, 3000);
+      return;
+    }
+    updateStoredEntry(kind, id, () => null);
+    finishReviewCard(card, '🗑 Descartado');
+  }
+});
+
+// ── Configurar la detección ──────────────────────────
+let captureStatus = { enabled: false };
+let pickerApps = null;
+
+function captureApps() {
+  const apps = readJSON(CAPTURE_APPS_KEY, []);
+  return Array.isArray(apps) ? apps.filter(a => a && typeof a.pkg === 'string' && typeof a.label === 'string') : [];
+}
+async function setCaptureApps(apps) {
+  localStorage.setItem(CAPTURE_APPS_KEY, JSON.stringify(apps));
+  try { await Native.PaymentCapture.setWatched({ packages: apps.map(a => a.pkg) }); }
+  catch (e) { toast('⚠ No se pudo guardar la app elegida'); }
+}
+async function refreshCaptureStatus() {
+  if (!Native) return;
+  try { captureStatus = await Native.PaymentCapture.getStatus(); } catch (e) { /* se queda el último estado conocido */ }
+  const apps = captureApps();
+  const active = apps.length > 0 && !!captureStatus.enabled;
+  document.getElementById('capture-card').classList.toggle('on', active);
+  document.getElementById('capture-summary').textContent =
+    !apps.length ? 'Desactivado' : !captureStatus.enabled ? 'Falta dar el permiso de notificaciones' : 'Activo · ' + apps.map(a => a.label).join(', ');
+  if (isShown('capture-sheet')) renderCapture();
+}
+function openCapture() {
+  closeSettings();
+  renderCapture();
+  document.getElementById('capture-sheet').classList.add('show');
+  refreshCaptureStatus();
+}
+function closeCapture() { document.getElementById('capture-sheet').classList.remove('show'); }
+
+function fmtLogTime(ms) {
+  const d = new Date(ms);
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getDate()) + '/' + p(d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function renderCapture() {
+  const apps = captureApps();
+  const enabled = !!captureStatus.enabled;
+  const log = readJSON(CAPTURE_LOG_KEY, []);
+  const logHtml = log.map(l => {
+    const result = l.result
+      ? `<span class="log-result ok">${l.result.kind === 'ingresos' ? 'Ingreso' : 'Gasto'} ${fmtMoney(l.result.amount)}</span>`
+      : '<span class="log-result no">Sin monto en Bs</span>';
+    return `<div class="log-item">
+      <div class="log-head"><span>${fmtLogTime(l.when)}</span><span>${esc(l.app)}</span>${result}</div>
+      <div class="log-text">${esc([l.title, l.text].filter(Boolean).join('\n'))}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('capture-body').innerHTML = `
+    <div class="sheet-note">Cuando pagas (por ejemplo con QR), tu banco te manda un aviso. Mis Finanzas puede leerlo y anotar el gasto sola; tú solo le pones nombre. Todo se queda en tu teléfono.</div>
+    <div class="step">
+      <div class="step-title">1 · ¿Qué app te avisa de tus pagos?</div>
+      <div class="step-desc">Normalmente la app de tu banco. Si el aviso te llega por SMS o por correo, elige esa app.</div>
+      ${apps.length ? `<div class="app-chips">${apps.map(a => `<div class="app-chip"><span>${esc(a.label)}</span><button data-remove="${esc(a.pkg)}" aria-label="Quitar ${esc(a.label)}">✕</button></div>`).join('')}</div>` : ''}
+      <button class="step-btn" data-act="pick">${apps.length ? 'Elegir otra app' : 'Elegir app'}</button>
+    </div>
+    <div class="step">
+      <div class="step-title">2 · Permiso para leer notificaciones</div>
+      <div class="step-status ${enabled ? 'ok' : 'no'}" id="capture-permission">${enabled ? '✓ Permiso concedido' : 'Falta dar el permiso'}</div>
+      <button class="step-btn" data-act="access">${enabled ? 'Ver el permiso en Android' : 'Dar permiso en Android'}</button>
+      ${enabled ? '' : `<div class="step-help">Si Android dice <b>«Ajuste restringido»</b> es porque la app no viene de la tienda. Toca el botón de abajo, luego los tres puntos <b>⋮</b> de arriba a la derecha y <b>«Permitir ajustes restringidos»</b>. Después vuelve aquí y da el permiso.
+        <button class="step-btn link" data-act="appinfo">Abrir información de la app</button></div>`}
+    </div>
+    <div class="step">
+      <div class="step-title">3 · Prueba con un pago pequeño</div>
+      <div class="step-desc" style="margin-bottom:0">Después de pagar, vuelve a Mis Finanzas: el gasto aparece arriba como «por revisar». Aquí abajo se ve cada aviso que leyó la app.</div>
+    </div>
+    <div class="step">
+      <div class="step-title">Últimos avisos leídos</div>
+      ${log.length ? logHtml + '<button class="step-btn link" data-act="share-log">Compartir estos avisos</button>' : '<div class="step-desc" style="margin-bottom:0">Todavía ninguno.</div>'}
+    </div>`;
+}
+document.getElementById('capture-body').addEventListener('click', async ev => {
+  const remove = ev.target.closest('[data-remove]');
+  if (remove) {
+    await setCaptureApps(captureApps().filter(a => a.pkg !== remove.dataset.remove));
+    refreshCaptureStatus();
+    return;
+  }
+  const btn = ev.target.closest('[data-act]');
+  if (!btn || !Native) return;
+  const act = btn.dataset.act;
+  try {
+    if (act === 'pick') await openPicker();
+    else if (act === 'access') await Native.PaymentCapture.openAccessSettings();
+    else if (act === 'appinfo') await Native.PaymentCapture.openAppInfo();
+    else if (act === 'share-log') {
+      const text = readJSON(CAPTURE_LOG_KEY, []).map(l =>
+        '[' + fmtLogTime(l.when) + ' · ' + l.app + '] ' + (l.result ? l.result.kind + ' ' + l.result.amount : 'sin monto') + '\n' + [l.title, l.text].filter(Boolean).join('\n')).join('\n\n');
+      await Native.Share.share({ title: 'Avisos leídos por Mis Finanzas', text, dialogTitle: 'Compartir avisos' });
+    }
+  } catch (e) {
+    if (!/cancel/i.test(String((e && e.message) || e))) toast('⚠ No se pudo abrir');
+  }
+});
+
+async function openPicker() {
+  pickerApps = null;
+  document.getElementById('picker-search').value = '';
+  document.getElementById('picker-list').innerHTML = '<div class="csel-opt" style="color:var(--text2)">Cargando apps…</div>';
+  document.getElementById('picker-sheet').classList.add('show');
+  try { pickerApps = (await Native.PaymentCapture.listApps()).apps || []; } catch (e) { pickerApps = []; }
+  renderPicker();
+}
+function renderPicker() {
+  if (!pickerApps) return;
+  const q = normalizeText(document.getElementById('picker-search').value.trim());
+  const chosen = new Set(captureApps().map(a => a.pkg));
+  const list = pickerApps.filter(a => !q || normalizeText(a.label).includes(q));
+  document.getElementById('picker-list').innerHTML = list.length
+    ? list.map(a => `<div class="csel-opt${chosen.has(a.pkg) ? ' sel' : ''}" data-pkg="${esc(a.pkg)}" data-label="${esc(a.label)}"><span>${esc(a.label)}</span>${chosen.has(a.pkg) ? '<span class="chk">✓</span>' : ''}</div>`).join('')
+    : '<div class="csel-opt" style="color:var(--text2)">Ninguna app con ese nombre</div>';
+}
+document.getElementById('picker-list').addEventListener('click', async ev => {
+  const row = ev.target.closest('[data-pkg]');
+  if (!row) return;
+  const pkg = row.dataset.pkg;
+  const apps = captureApps();
+  await setCaptureApps(apps.some(a => a.pkg === pkg) ? apps.filter(a => a.pkg !== pkg) : apps.concat([{ pkg, label: row.dataset.label }]));
+  renderPicker();
+});
+function closePicker() {
+  document.getElementById('picker-sheet').classList.remove('show');
+  refreshCaptureStatus();
+}
+
+if (Native) {
+  document.getElementById('capture-section').style.display = '';
+  Native.PaymentCapture.addListener('captured', () => syncCaptured());
+  Native.App.addListener('resume', () => { refreshCaptureStatus(); syncCaptured(); });
+  // Al abrir: Android debe vigilar exactamente las apps elegidas aquí
+  Native.PaymentCapture.setWatched({ packages: captureApps().map(a => a.pkg) }).catch(() => {})
+    .then(() => { refreshCaptureStatus(); syncCaptured(); });
+}
+
 // ── INIT ─────────────────────────────────────────────
 document.getElementById('inp-date').value = todayISO();
 loadPcts();
 applyMode();
 if(currentModeKey !== 'analisis') { load(); } else { updateAnPeriodUI(); }
 updatePeriodUI();
+updateReviewBar();
 
 // El service worker es solo para la versión web; dentro de la app Android no hace falta
 if('serviceWorker' in navigator && !Native){

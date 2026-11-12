@@ -24,6 +24,18 @@
 
         </activity>
 
+        <!-- Lee las notificaciones de las apps que el usuario elija (su banco) para anotar
+             los pagos. Solo se activa si el usuario le da "acceso a notificaciones". -->
+        <service
+            android:name=".PaymentNotificationListener"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -34,6 +46,14 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
     </application>
+
+    <!-- Para mostrar la lista de apps instaladas y que el usuario elija la de su banco -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <!-- Permissions -->
 

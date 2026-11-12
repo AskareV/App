@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
+const { fakeNativeBridge } = require('./fake-native');
 
 const ROOT = path.resolve(process.env.WWW_DIR || path.join(__dirname, '..', 'www'));
 const TYPES = {
@@ -30,33 +31,6 @@ function startServer() {
 // Movimiento tal como lo guarda la app
 const mk = (id, date, amount, cat, detail) => ({ id, amount, detail, cat, date: date + 'T12:00:00' });
 
-// Puente nativo simulado: hace creer a la página que corre dentro de la app Android
-// y anota las llamadas a los plugins para poder comprobarlas.
-function fakeNativeBridge() {
-  window.androidBridge = { postMessage() {} };
-  window.__native = { calls: [], listeners: {} };
-  const promise = { rtype: 'promise' };
-  window.Capacitor = {
-    PluginHeaders: [
-      { name: 'App', methods: [{ name: 'addListener' }, { name: 'removeListener' }, { name: 'getInfo', ...promise }, { name: 'minimizeApp', ...promise }] },
-      { name: 'Filesystem', methods: [{ name: 'writeFile', ...promise }] },
-      { name: 'Share', methods: [{ name: 'share', ...promise }] },
-    ],
-    nativePromise(plugin, method, options) {
-      window.__native.calls.push({ plugin, method, options });
-      if (plugin === 'App' && method === 'getInfo') return Promise.resolve({ version: '1.0', build: '7' });
-      if (plugin === 'Filesystem' && method === 'writeFile') return Promise.resolve({ uri: 'file:///cache/' + options.path });
-      if (plugin === 'Share' && window.__native.shareFails) return Promise.reject(new Error(window.__native.shareFails));
-      return Promise.resolve({});
-    },
-    nativeCallback(plugin, method, options, callback) {
-      window.__native.calls.push({ plugin, method, options });
-      if (method === 'addListener') window.__native.listeners[plugin + ':' + options.eventName] = callback;
-      return 'callback-1';
-    },
-  };
-}
-
 async function main() {
   const server = await startServer();
   const base = 'http://127.0.0.1:' + server.address().port;
@@ -64,6 +38,7 @@ async function main() {
   const results = [];
 
   // Abre la app con una fecha/hora fija y datos guardados de antemano.
+  // native: true, o un objeto { captured, enabled, apps } con lo que "tiene guardado" Android
   async function open({ now = '2026-11-11T10:00:00-04:00', seed = {}, native = false } = {}) {
     const ctx = await browser.newContext({
       timezoneId: 'America/La_Paz', locale: 'es-BO',
@@ -79,7 +54,7 @@ async function main() {
     });
     const page = await ctx.newPage();
     await page.clock.install({ time: new Date(now) });
-    if (native) await page.addInitScript(fakeNativeBridge);
+    if (native) await page.addInitScript(fakeNativeBridge, native === true ? {} : native);
     await page.addInitScript((s) => {
       // Solo la primera vez: si la página se recarga, se conserva lo que haya guardado
       if (sessionStorage.getItem('__seeded')) return;
@@ -431,6 +406,271 @@ async function main() {
     assert.strictEqual((await nativeCalls(page, 'App', 'minimizeApp')).length, 0);
     await pressBack(page);
     assert.strictEqual((await nativeCalls(page, 'App', 'minimizeApp')).length, 1);
+  });
+
+
+  console.log('Pagos detectados: lectura de avisos');
+
+  await test('saca monto, tipo y nombre de avisos con distintos formatos', async (open) => {
+    const { page } = await open();
+    const casos = [
+      [{ title: 'BNB', text: 'Pago QR realizado por Bs 50.00 a JUAN PEREZ' }, 'gastos', 50, 'Pago a JUAN PEREZ'],
+      [{ title: 'Transferencia exitosa', text: 'Transferiste Bs. 1.250,50 a María Fernández. Saldo disponible: Bs. 3.400,00' }, 'gastos', 1250.5, 'Pago a María Fernández'],
+      [{ title: 'Débito en cuenta', text: 'Se debitó BOB 35,00 de tu cuenta 1234567 por PAGO QR. Nro. operación 987654' }, 'gastos', 35, 'Pago detectado'],
+      [{ title: 'Compra con tarjeta', text: 'Compra por 89.90 Bs. en HIPERMAXI SA el 12/11/2026 14:32' }, 'gastos', 89.9, 'Pago a HIPERMAXI SA'],
+      [{ title: 'Mensajes', text: 'BANCO UNION: Debito de Bs 200.00 en su cuenta ...1234 por transferencia QR a ROSA QUISPE. Saldo Bs 1,543.20' }, 'gastos', 200, 'Pago a ROSA QUISPE'],
+      [{ title: 'QR', text: 'PAGO QR A TIENDA DOÑA MARIA POR BS 12.50 EXITOSO' }, 'gastos', 12.5, 'Pago a TIENDA DOÑA MARIA'],
+      [{ title: '77712345', text: 'BCP: Realizaste un pago QR de Bs 45.00 a Farmacia Chavez el 12/11' }, 'gastos', 45, 'Pago a Farmacia Chavez'],
+      [{ title: '', text: 'Pago de servicios: 150 bolivianos. Código 445566' }, 'gastos', 150, 'Pago detectado'],
+      [{ title: '', text: 'Pago realizado 75.00 Bs. 12/11/2026' }, 'gastos', 75, 'Pago detectado'],
+      [{ title: '', text: 'Nro. 123456 Bs 80.00 pago QR' }, 'gastos', 80, 'Pago detectado'],
+      [{ title: 'Yape', text: 'Recibiste Bs 120 de Carlos Mamani' }, 'ingresos', 120, 'De Carlos Mamani'],
+      [{ title: 'Transferencia recibida', text: 'Te transfirieron Bs 1.500 desde la cuenta de PEDRO ROJAS' }, 'ingresos', 1500, 'De PEDRO ROJAS'],
+      [{ title: '', text: 'Recibiste un pago QR de Bs 30 de Ana Flores' }, 'ingresos', 30, 'De Ana Flores'],
+    ];
+    for (const [aviso, kind, amount, detail] of casos) {
+      const r = await page.evaluate((a) => parsePaymentNotice(a), aviso);
+      assert.deepStrictEqual(r, { kind, amount, detail }, 'aviso: ' + aviso.text);
+    }
+  });
+
+  await test('entiende los formatos de número habituales', async (open) => {
+    const { page } = await open();
+    const casos = { 'Bs 1,234.50': 1234.5, 'Bs. 1.234,50': 1234.5, 'Bs 1.500': 1500, 'Bs 0,50': 0.5, 'Bs50': 50, 'BOB 25': 25, '50,5 Bs': 50.5, 'Bs.-18.00': 18, 'bs 7': 7, 'Bs 1.234.567,89': 1234567.89 };
+    for (const [texto, esperado] of Object.entries(casos)) {
+      const r = await page.evaluate((t) => parsePaymentNotice({ title: '', text: 'Pago por ' + t }), texto);
+      assert.strictEqual(r && r.amount, esperado, 'texto: ' + texto);
+    }
+  });
+
+  await test('no inventa pagos donde no hay un monto en bolivianos', async (open) => {
+    const { page } = await open();
+    const casos = [
+      'Aprovecha 2x1 en cines este fin de semana',
+      'Tu saldo es Bs 500.00',
+      'Saldo disponible: Bs 1,234.00',
+      'Compra por USD 20.00 en AMAZON',
+      'Tu código de verificación es 482913',
+      'Los clubs 5 abren a las 10',
+      '',
+    ];
+    for (const text of casos) {
+      assert.strictEqual(await page.evaluate((t) => parsePaymentNotice({ title: 'Banco', text: t }), text), null, 'texto: ' + text);
+    }
+  });
+
+  console.log('Pagos detectados: en la app');
+
+  const aviso = (id, text, when = '2026-11-10T15:30:00-04:00', title = 'Banco Ejemplo') =>
+    ({ id, pkg: 'com.banco.ejemplo', app: 'Banco Ejemplo', title, text, when: new Date(when).getTime() });
+  const bancoApps = [{ pkg: 'com.banco.ejemplo', label: 'Banco Ejemplo' }, { pkg: 'com.mensajes', label: 'Mensajes' }, { pkg: 'com.otra', label: 'Ñandú Mapas' }];
+  const waitSynced = (page) => page.waitForFunction(() => window.__native.calls.some((c) => c.method === 'removeCaptured'));
+
+  await test('un aviso de pago se anota solo como gasto por revisar', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [aviso('n1', 'Pago QR realizado por Bs 50.00 a JUAN PEREZ'), aviso('n2', 'Tu clave dinámica es 1234')] } });
+    await waitSynced(page);
+    await expectToast(page, /1 pago detectado/);
+    const gastos = await stored(page, 'gastos-app-v1');
+    assert.strictEqual(gastos.length, 1);
+    assert.strictEqual(gastos[0].amount, 50);
+    assert.strictEqual(gastos[0].detail, 'Pago a JUAN PEREZ');
+    assert.strictEqual(gastos[0].cat, 'Otro');
+    assert.strictEqual(gastos[0].date, '2026-11-10T12:00:00');
+    assert.strictEqual(gastos[0].pending, true);
+    // Android ya puede olvidar los dos avisos (el que era un pago y el que no)
+    assert.deepStrictEqual((await nativeCalls(page, 'PaymentCapture', 'removeCaptured'))[0].options.ids, ['n1', 'n2']);
+    assert.strictEqual(await page.textContent('#review-bar-text'), '1 pago por revisar');
+    assert.match(await page.textContent('#topbar-sub'), /1 gastos en Noviembre · Bs\. 50,00/);
+    await page.click('#tab-list');
+    assert.strictEqual(await page.locator('#list .tag-pending').count(), 1);
+  });
+
+  await test('revisar: poner nombre y categoría deja el gasto como uno normal', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [aviso('n1', 'Pago QR realizado por Bs 50.00 a JUAN PEREZ'), aviso('n2', 'Pago QR realizado por Bs 12.00 a KIOSCO')] } });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    assert.strictEqual(await page.locator('#review-list .rv-card').count(), 2);
+    const card = page.locator('#review-list .rv-card', { hasText: 'JUAN PEREZ' });
+    assert.strictEqual(await card.locator('.rv-name').inputValue(), 'Pago a JUAN PEREZ');
+    await card.locator('.rv-name').fill('Almuerzo con Juan');
+    await card.locator('.chip', { hasText: 'Alimentación' }).click();
+    await card.locator('.rv-save').click();
+    assert.strictEqual(await page.locator('#review-list .rv-card').count(), 1);
+    const guardado = (await stored(page, 'gastos-app-v1')).find((g) => g.amount === 50);
+    assert.strictEqual(guardado.detail, 'Almuerzo con Juan');
+    assert.strictEqual(guardado.cat, 'Alimentación');
+    assert.strictEqual('pending' in guardado, false);
+    assert.strictEqual(await page.textContent('#review-bar-text'), '1 pago por revisar');
+    // Al revisar el último, la hoja se cierra y la barra desaparece
+    await page.locator('#review-list .rv-save').click();
+    assert.strictEqual(await page.locator('#review-sheet.show').count(), 0);
+    assert.strictEqual(await page.locator('#review-bar.show').count(), 0);
+  });
+
+  await test('revisar: descartar pide confirmación y borra el movimiento', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [aviso('n1', 'Pago QR realizado por Bs 50.00 a JUAN PEREZ')] } });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    await page.click('#review-list .rv-discard');
+    assert.strictEqual((await stored(page, 'gastos-app-v1')).length, 1, 'un solo toque no debe borrar');
+    assert.strictEqual(await page.textContent('#review-list .rv-discard'), '¿Descartar?');
+    await page.click('#review-list .rv-discard');
+    assert.deepStrictEqual(await stored(page, 'gastos-app-v1'), []);
+    assert.strictEqual(await page.locator('#review-sheet.show').count(), 0);
+  });
+
+  await test('revisar: no se puede guardar sin nombre', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [aviso('n1', 'Débito de Bs 20.00')] } });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    await page.fill('#review-list .rv-name', '   ');
+    await page.click('#review-list .rv-save');
+    await expectToast(page, /Ponle un nombre/);
+    assert.strictEqual((await stored(page, 'gastos-app-v1'))[0].pending, true);
+  });
+
+  await test('editar a mano un gasto detectado también lo da por revisado', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [aviso('n1', 'Débito de Bs 20.00', '2026-11-11T09:00:00-04:00')] } });
+    await waitSynced(page);
+    await page.click('#tab-list');
+    await page.click('#list .btn-action.edit');
+    await page.fill('#inp-detail', 'Fotocopias');
+    await page.click('#btn-submit');
+    const g = (await stored(page, 'gastos-app-v1'))[0];
+    assert.strictEqual(g.detail, 'Fotocopias');
+    assert.strictEqual('pending' in g, false);
+    assert.strictEqual(await page.locator('#review-bar.show').count(), 0);
+  });
+
+  await test('un dinero recibido se anota como ingreso por revisar', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [aviso('n1', 'Recibiste Bs 120 de Carlos Mamani'), aviso('n2', 'Pagaste Bs 8 a TRUFI')] } });
+    await waitSynced(page);
+    const ingresos = await stored(page, 'ingresos-app-v1');
+    assert.strictEqual(ingresos.length, 1);
+    assert.strictEqual(ingresos[0].amount, 120);
+    assert.strictEqual(ingresos[0].cat, 'Otros');
+    assert.strictEqual(await page.textContent('#review-bar-text'), '2 movimientos por revisar');
+    await page.click('#review-bar');
+    const card = page.locator('#review-list .rv-card', { hasText: 'Carlos Mamani' });
+    assert.strictEqual(await card.locator('.rv-amount').textContent(), '+Bs. 120,00');
+    assert.deepStrictEqual(await card.locator('.chip').allTextContents(), ['💼 Sueldos', '📋 Encuestas', '📦 Otros']);
+  });
+
+  await test('si Android vuelve a entregar un aviso ya anotado, no se duplica', async (open) => {
+    const { page } = await open({ native: { enabled: true, captured: [aviso('n1', 'Pago QR realizado por Bs 50.00 a JUAN PEREZ')] } });
+    // Simula un fallo justo al confirmar: Android conserva el aviso y lo entrega otra vez
+    await page.evaluate(() => { window.__native.removeFails = true; });
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem('gastos-app-v1') || '[]')).length === 1);
+    await page.evaluate(() => { window.__native.removeFails = false; });
+    await page.evaluate(() => window.__native.listeners['App:resume']());
+    await page.waitForFunction(() => window.__native.captured.length === 0);
+    assert.strictEqual((await stored(page, 'gastos-app-v1')).length, 1);
+  });
+
+  await test('un pago que llega con la app abierta aparece al momento', async (open) => {
+    const { page } = await open({ native: { enabled: true } });
+    await page.waitForFunction(() => !!window.__native.listeners['PaymentCapture:captured']);
+    assert.strictEqual(await page.locator('#review-bar.show').count(), 0);
+    await page.evaluate((a) => { window.__native.captured.push(a); window.__native.listeners['PaymentCapture:captured']({}); }, aviso('n9', 'Compra por Bs 33,50 en LIBRERIA'));
+    await page.waitForSelector('#review-bar.show');
+    assert.strictEqual((await stored(page, 'gastos-app-v1'))[0].amount, 33.5);
+  });
+
+  await test('configurar: elegir la app del banco y ver el estado del permiso', async (open) => {
+    const { page } = await open({ native: { enabled: false, apps: bancoApps } });
+    await page.click('#gear-btn');
+    assert.strictEqual(await page.locator('#capture-section').isVisible(), true);
+    assert.strictEqual(await page.textContent('#capture-summary'), 'Desactivado');
+    await page.click('#capture-card');
+    assert.strictEqual(await page.locator('#settings-modal.show').count(), 0);
+    assert.strictEqual(await page.textContent('#capture-permission'), 'Falta dar el permiso');
+
+    // Paso 1: buscar (sin tildes ni mayúsculas) y elegir la app
+    await page.click('#capture-body [data-act="pick"]');
+    await page.waitForSelector('#picker-list [data-pkg]');
+    assert.strictEqual(await page.locator('#picker-list [data-pkg]').count(), 3);
+    await page.fill('#picker-search', 'nandu');
+    assert.deepStrictEqual(await page.locator('#picker-list [data-pkg]').allTextContents(), ['Ñandú Mapas']);
+    await page.fill('#picker-search', 'banco');
+    await page.click('#picker-list [data-pkg="com.banco.ejemplo"]');
+    await page.waitForSelector('#picker-list .sel');
+    await page.click('#picker-sheet .sheet-close');
+    assert.deepStrictEqual(await page.evaluate(() => window.__native.watched), ['com.banco.ejemplo']);
+    assert.deepStrictEqual(await page.locator('#capture-body .app-chip span').allTextContents(), ['Banco Ejemplo']);
+
+    // Paso 2: el botón abre los ajustes de Android; al volver con el permiso dado, se refleja
+    await page.click('#capture-body [data-act="access"]');
+    assert.strictEqual((await nativeCalls(page, 'PaymentCapture', 'openAccessSettings')).length, 1);
+    await page.click('#capture-body [data-act="appinfo"]');
+    assert.strictEqual((await nativeCalls(page, 'PaymentCapture', 'openAppInfo')).length, 1);
+    await page.evaluate(() => { window.__native.captureEnabled = true; window.__native.listeners['App:resume'](); });
+    await page.waitForFunction(() => document.getElementById('capture-permission').textContent.includes('concedido'));
+    assert.strictEqual(await page.locator('#capture-body [data-act="appinfo"]').count(), 0);
+    await page.click('#capture-sheet .sheet-close');
+    await page.click('#gear-btn');
+    assert.strictEqual(await page.textContent('#capture-summary'), 'Activo · Banco Ejemplo');
+
+    // Quitar la app deja de vigilarla
+    await page.click('#capture-card');
+    await page.click('#capture-body [data-remove]');
+    await page.waitForFunction(() => window.__native.watched.length === 0);
+    assert.strictEqual(await page.locator('#capture-body .app-chip').count(), 0);
+  });
+
+  await test('al abrir, Android vigila las apps que quedaron elegidas', async (open) => {
+    const { page } = await open({ seed: { 'capture-apps': [bancoApps[0]] }, native: { enabled: true, apps: bancoApps } });
+    await page.waitForFunction(() => window.__native.watched.length === 1);
+    assert.deepStrictEqual(await page.evaluate(() => window.__native.watched), ['com.banco.ejemplo']);
+  });
+
+  await test('la configuración muestra los últimos avisos leídos y permite compartirlos', async (open) => {
+    const { page } = await open({ seed: { 'capture-apps': [bancoApps[0]] }, native: { enabled: true, captured: [aviso('n1', 'Pago QR realizado por Bs 50.00 a JUAN PEREZ'), aviso('n2', 'Tu clave dinámica es 1234')] } });
+    await waitSynced(page);
+    await page.click('#gear-btn');
+    await page.click('#capture-card');
+    const filas = page.locator('#capture-body .log-item');
+    assert.strictEqual(await filas.count(), 2);
+    assert.deepStrictEqual((await page.locator('#capture-body .log-result').allTextContents()).sort(), ['Gasto Bs. 50,00', 'Sin monto en Bs']);
+    await page.click('#capture-body [data-act="share-log"]');
+    const [share] = await nativeCalls(page, 'Share', 'share');
+    assert.match(share.options.text, /Pago QR realizado por Bs 50\.00 a JUAN PEREZ/);
+    assert.match(share.options.text, /sin monto/);
+  });
+
+  await test('el botón atrás cierra las hojas de pagos detectados', async (open) => {
+    const { page } = await open({ native: { enabled: true, apps: bancoApps, captured: [aviso('n1', 'Pago por Bs 5')] } });
+    await waitSynced(page);
+    await page.click('#review-bar');
+    await pressBack(page);
+    assert.strictEqual(await page.locator('#review-sheet.show').count(), 0);
+    await page.click('#gear-btn');
+    await page.click('#capture-card');
+    await page.click('#capture-body [data-act="pick"]');
+    await page.waitForSelector('#picker-sheet.show');
+    await pressBack(page);
+    assert.strictEqual(await page.locator('#picker-sheet.show').count(), 0);
+    assert.strictEqual(await page.locator('#capture-sheet.show').count(), 1);
+    await pressBack(page);
+    assert.strictEqual(await page.locator('#capture-sheet.show').count(), 0);
+    assert.strictEqual((await nativeCalls(page, 'App', 'minimizeApp')).length, 0);
+  });
+
+  await test('en el navegador no aparece la opción de pagos automáticos', async (open) => {
+    const { page } = await open();
+    await page.click('#gear-btn');
+    assert.strictEqual(await page.locator('#capture-section').isVisible(), false);
+  });
+
+  await test('los movimientos por revisar viajan en la copia de seguridad', async (open) => {
+    const a = await open({ native: { enabled: true, captured: [aviso('n1', 'Pago QR realizado por Bs 50.00 a JUAN PEREZ')] } });
+    await waitSynced(a.page);
+    const copia = await a.page.evaluate(() => buildBackup());
+    const b = await open();
+    await importFile(b.page, copia);
+    await importSummary(b.page);
+    await b.page.click('#btn-import-confirm');
+    await b.page.waitForSelector('#review-bar.show');
+    assert.strictEqual(await b.page.textContent('#review-bar-text'), '1 pago por revisar');
   });
 
   await browser.close();
