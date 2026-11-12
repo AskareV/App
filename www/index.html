@@ -202,6 +202,7 @@
 
     /* Fijos */
     .rv-fixed{border-color:#3b2f63}
+    .tag-tithe{font-size:10px;font-weight:600;color:#c4b5fd;background:#18132b;border:1px solid #3b2f63;border-radius:10px;padding:1px 7px;white-space:nowrap}
     .tag-fixed{font-size:10px;font-weight:600;color:#c4b5fd;background:#18132b;border:1px solid #3b2f63;border-radius:10px;padding:1px 7px;white-space:nowrap}
     .fx-sum{display:grid;grid-template-columns:1fr auto;row-gap:6px;font-size:13px;color:var(--text2)}
     .fx-sum .v{font-family:var(--mono);font-weight:600;text-align:right;color:var(--text)}
@@ -1349,8 +1350,10 @@ function renderHistorico() {
   const enCuenta = ingresos.reduce((s,e) => s + e.amount, 0) - gastos.filter(e => e.lostLoanId == null).reduce((s,e) => s + e.amount, 0);
   const ingresosReales = ingresos.filter(e => !isLoanFlow(e));
   const totalIngresos = ingresosReales.reduce((s,e) => s + e.amount, 0);
-  const totalGastos = gastos.filter(e => !isLoanFlow(e)).reduce((s,e) => s + e.amount, 0);
-  const balanceReal = totalIngresos - totalGastos;
+  const totalGastos = gastos.filter(e => !isLoanFlow(e) && !isTithe(e)).reduce((s,e) => s + e.amount, 0);
+  const totalDiezmo = gastos.filter(isTithe).reduce((s,e) => s + e.amount, 0);
+  // El ahorro es lo que queda después de los gastos y del diezmo
+  const balanceReal = totalIngresos - totalGastos - totalDiezmo;
   const meDeben = loanStatuses().reduce((s,x) => s + x.remaining, 0);
 
   // Meses con ingresos (clave year-month)
@@ -1375,7 +1378,7 @@ function renderHistorico() {
   const cumple = porReponer <= 0;
   const pctCumplimiento = objetivoAhorro > 0 ? Math.min(100, Math.max(0, balanceReal / objetivoAhorro * 100)) : 0;
 
-  if (nMeses === 0 && totalGastos === 0) {
+  if (nMeses === 0 && totalGastos === 0 && totalDiezmo === 0) {
     el.innerHTML = '<div class="no-data"><div class="nd-icon">📅</div><p>Sin datos históricos.<br>Registra ingresos y gastos primero.</p></div>';
     return;
   }
@@ -1403,6 +1406,10 @@ function renderHistorico() {
   +     '<div style="background:var(--bg3);border-radius:var(--radius-sm);padding:10px 12px">'
   +       '<div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Gastos totales</div>'
   +       '<div style="font-size:14px;font-weight:600;font-family:var(--mono);color:#f5c842">' + fmtM(totalGastos) + '</div>'
+  +     '</div>'
+  +     '<div style="background:var(--bg3);border-radius:var(--radius-sm);padding:10px 12px;grid-column:1/-1">'
+  +       '<div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Diezmo total (aparte)</div>'
+  +       '<div style="font-size:14px;font-weight:600;font-family:var(--mono);color:#c4b5fd">' + fmtM(totalDiezmo) + '</div>'
   +     '</div>'
   +   '</div>'
   + '</div>'
@@ -1615,12 +1622,12 @@ function updateAll(){
   }
   if(currentModeKey==='fijos'){
     const fixed=readFixed(), cur=monthKeyOf(new Date());
-    const sum=k=>fixed.filter(f=>f.kind===k&&f.start<=cur).reduce((s,f)=>s+amountFor(f,cur),0);
+    const sum=k=>fixed.filter(f=>f.kind===k&&f.start<=cur&&!(k==='gastos'&&f.cat===TITHE_CAT)).reduce((s,f)=>s+amountFor(f,cur),0);
     sub.textContent=fixed.length?`Cada mes: +${fmtMoney(sum('ingresos'))} · −${fmtMoney(sum('gastos'))}`:'Lo que se repite cada mes';
     return;
   }
   const now=new Date();
-  const monthData=expenses.filter(e=>{const d=new Date(e.date);return !isLoanFlow(e)&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
+  const monthData=expenses.filter(e=>{const d=new Date(e.date);return !isLoanFlow(e)&&!isTithe(e)&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
   const total=monthData.reduce((s,e)=>s+e.amount,0);
   document.getElementById('topbar-sub').textContent=`${monthData.length} ${currentMode.nounPlural} en ${MONTHS[now.getMonth()]} · ${fmtMoney(total)}`;
 }
@@ -1681,8 +1688,9 @@ function renderStats(){
   // Préstamos y devoluciones no son gastos ni ingresos: van aparte
   const filtered=all.filter(e=>!isLoanFlow(e));
   const apart=all.filter(isLoanFlow);
-  // Diezmo es mes vencido (del mes anterior) — se excluye de los totales del mes
-  const filteredSinDiezmo=filtered.filter(e=>e.cat!=='Diezmo');
+  // El diezmo es aparte (y de mes vencido): no se suma a los gastos del mes
+  const filteredSinDiezmo=filtered.filter(e=>!isTithe(e));
+  const tithe=filtered.filter(isTithe);
   const total=filteredSinDiezmo.reduce((s,e)=>s+e.amount,0);
   let weekTotal=0;
   if(selWeek===null){
@@ -1700,21 +1708,23 @@ function renderStats(){
   document.getElementById('s-count').textContent=count;
   document.getElementById('s-avg').textContent=fmtMoney(avg);
   const bycat={};
-  filtered.forEach(e=>{bycat[e.cat]=(bycat[e.cat]||0)+e.amount;});
+  filteredSinDiezmo.forEach(e=>{bycat[e.cat]=(bycat[e.cat]||0)+e.amount;});
   const sorted=Object.entries(bycat).sort((a,b)=>b[1]-a[1]);
   const el=document.getElementById('cat-breakdown');
   const apartTotal=apart.reduce((s,e)=>s+e.amount,0);
   const note=apart.length?`<div class="loan-note">${currentModeKey==='gastos'
     ?`🤝 Prestaste ${fmtMoney(apartTotal)} en este período. No se cuenta como gasto: lo ves en ⚙ → «Mis Préstamos».`
     :`↩️ Te devolvieron ${fmtMoney(apartTotal)} en este período. No se cuenta como ingreso: se descuenta de lo que te deben.`}</div>`:'';
-  if(!sorted.length){el.innerHTML=note+`<div class="empty"><div class="icon">📊</div><p>Sin ${currentMode.nounPlural} en este período.</p></div>`;return;}
-  el.innerHTML=note+sorted.map(([cat,amt])=>{
+  const titheTotal=tithe.reduce((s,e)=>s+e.amount,0);
+  const titheNote=tithe.length?`<div class="loan-note">⛪ Diezmo pagado en este período: ${fmtMoney(titheTotal)} (corresponde a ${monthName(addMonths(selYear+'-'+String(selMonth+1).padStart(2,'0'),-1))}). Es aparte: no se suma a los gastos.</div>`:'';
+  if(!sorted.length){el.innerHTML=titheNote+note+`<div class="empty"><div class="icon">📊</div><p>Sin ${currentMode.nounPlural} en este período.</p></div>`;return;}
+  el.innerHTML=titheNote+note+sorted.map(([cat,amt])=>{
     const pct=total>0?Math.round(amt/total*100):0;
     const m=currentMode.cats[cat]||{icon:'📦',bg:'#181818'};
     return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <div style="width:32px;height:32px;border-radius:8px;background:${m.bg};display:flex;align-items:center;justify-content:center;font-size:16px">${m.icon}</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:500;color:var(--text)">${esc(cat)}</div><div style="font-size:11px;color:var(--text2)">${filtered.filter(e=>e.cat===cat).length} ${currentMode.nounPlural} · ${pct}%</div></div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:500;color:var(--text)">${esc(cat)}</div><div style="font-size:11px;color:var(--text2)">${filteredSinDiezmo.filter(e=>e.cat===cat).length} ${currentMode.nounPlural} · ${pct}%</div></div>
         <div style="font-size:14px;font-weight:600;font-family:var(--mono);color:var(--accent-text)">${fmtMoney(amt)}</div>
       </div>
       <div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent);border-radius:2px;transition:width .4s"></div></div>
@@ -1764,7 +1774,7 @@ function renderList(){
         <div class="cat-icon" style="background:${m.bg}">${m.icon}</div>
         <div class="item-info">
           <div class="item-detail" title="${esc(e.detail)}">${esc(e.detail)}</div>
-          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span>${e.pending?'<span class="tag-pending">Por revisar</span>':''}${loanTag(e)}${e.fixedId!=null?'<span class="tag-fixed">Fijo</span>':''}</div>
+          <div class="item-meta"><span class="item-cat">${esc(e.cat)}</span><div class="item-dot"></div><span class="item-date">${fmtDate(e.date)}</span>${e.pending?'<span class="tag-pending">Por revisar</span>':''}${loanTag(e)}${e.fixedId!=null?'<span class="tag-fixed">Fijo</span>':''}${currentModeKey==='gastos'&&isTithe(e)?`<span class="tag-tithe">Aparte · de ${titheMonthName(e.date)}</span>`:''}</div>
         </div>
         <div class="item-amount">${fmtMoney(e.amount)}</div>
       </div>
@@ -1782,6 +1792,15 @@ function renderList(){
 // como ingreso de tipo «Devolución», unido a su préstamo (loanId). Ninguno entra en los totales.
 const LOAN_CAT = 'Préstamo', REPAY_CAT = 'Devolución';
 function isLoanFlow(e) { return !!e && (e.cat === LOAN_CAT || e.cat === REPAY_CAT); }
+
+// ── DIEZMO ───────────────────────────────────────────
+// El sueldo se reparte en gastos, ahorro y diezmo: el diezmo es una parte aparte, no un gasto.
+// Se anota en Mis Gastos (es dinero que sale) pero no se suma a los gastos del mes, y es
+// «mes vencido»: lo que se paga en noviembre corresponde a lo ganado en octubre.
+const TITHE_CAT = 'Diezmo';
+function isTithe(e) { return !!e && e.cat === TITHE_CAT; }
+// Mes al que corresponde un diezmo pagado en esa fecha (el anterior), en palabras
+function titheMonthName(date) { return monthName(addMonths(monthKeyOf(new Date(date)), -1)); }
 
 // Cada préstamo con lo que ya te devolvieron y lo que falta
 function loanStatuses() {
@@ -2220,8 +2239,10 @@ function renderFixed() {
   const el = document.getElementById('fixed-content');
   const fixed = readFixed();
   const cur = monthKeyOf(new Date());
-  const monthly = k => fixed.filter(f => f.kind === k && f.start <= cur).reduce((s, f) => s + amountFor(f, cur), 0);
-  const inc = monthly('ingresos'), out = monthly('gastos');
+  const monthly = (k, tithe) => fixed.filter(f => f.kind === k && f.start <= cur && (k !== 'gastos' || (f.cat === TITHE_CAT) === tithe))
+    .reduce((s, f) => s + amountFor(f, cur), 0);
+  const inc = monthly('ingresos'), out = monthly('gastos', false), titheOut = monthly('gastos', true);
+  const left = inc - out - titheOut;
   const lists = { gastos: readList(DATA_KEYS.gastos), ingresos: readList(DATA_KEYS.ingresos) };
 
   const summary = fixed.length ? `<div class="an-section">
@@ -2229,7 +2250,8 @@ function renderFixed() {
       <div class="fx-sum">
         <span>Ingresos fijos</span><span class="v in">+${fmtMoney(inc)}</span>
         <span>Gastos fijos</span><span class="v out">−${fmtMoney(out)}</span>
-        <span class="total">Quedan</span><span class="v total">${inc - out < 0 ? '−' + fmtMoney(out - inc) : fmtMoney(inc - out)}</span>
+        ${titheOut ? `<span>Diezmo (aparte)</span><span class="v" style="color:#c4b5fd">−${fmtMoney(titheOut)}</span>` : ''}
+        <span class="total">Quedan</span><span class="v total">${left < 0 ? '−' + fmtMoney(-left) : fmtMoney(left)}</span>
       </div>
     </div>` : '';
 

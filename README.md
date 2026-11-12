@@ -32,6 +32,11 @@ Las fechas se guardan como `AAAA-MM-DDT12:00:00` (mediodía, hora local).
 Modos (panel ⚙, se recuerdan en `app-mode`): Mis Gastos, Mis Ingresos, Mis Préstamos,
 Mis Fijos y Mis Análisis.
 
+Diezmo: se anota en Mis Gastos con `cat: "Diezmo"`, pero es una parte aparte del sueldo
+(no un gasto): no se suma a los gastos del mes (barra de arriba, Resumen, Histórico) y se
+muestra por separado. Es «mes vencido»: lo pagado en noviembre corresponde a octubre, y así
+lo cuenta Mis Análisis. Sí se descuenta del ahorro y del saldo.
+
 Préstamos: un préstamo es un gasto con `cat: "Préstamo"`, y cada devolución es un ingreso con
 `cat: "Devolución"` y `loanId` (el `id` del préstamo). Ninguno de los dos se suma a los
 gastos ni a los ingresos; el modo «Mis Préstamos» muestra cuánto falta de cada uno (con

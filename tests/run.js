@@ -1065,6 +1065,57 @@ async function main() {
     assert.match(text, /INGRESOS FIJOS 💼 Sueldo .* \+ Agregar ingreso fijo GASTOS FIJOS 🚌 Micro .* \+ Agregar gasto fijo/);
   });
 
+
+  console.log('Diezmo');
+
+  // Noviembre: mercado Bs 1.000 y el diezmo de octubre (Bs 300) pagado el 4/11
+  const conDiezmo = {
+    'gastos-app-v1': [mk(1, '2026-11-03', 1000, 'Alimentación', 'Mercado'), mk(2, '2026-11-04', 300, 'Diezmo', 'Diezmo')],
+    'ingresos-app-v1': [mk(9, '2026-10-05', 3000, 'Sueldos', 'Sueldo'), mk(8, '2026-11-05', 3000, 'Sueldos', 'Sueldo')],
+  };
+
+  await test('el diezmo no se suma a los gastos del mes y el desglose suma 100 %', async (open) => {
+    const { page } = await open({ seed: conDiezmo });
+    assert.strictEqual(await page.textContent('#topbar-sub'), '1 gastos en Noviembre · Bs. 1.000,00');
+    await page.click('#tab-stats');
+    assert.strictEqual(await page.textContent('#s-month'), 'Bs. 1.000,00');
+    assert.strictEqual(await page.textContent('#s-count'), '1');
+    const rows = await page.$$eval('#cat-breakdown > div', (els) => els.map((e) => e.innerText.replace(/\s+/g, ' ').trim()));
+    assert.deepStrictEqual(rows, [
+      '⛪ Diezmo pagado en este período: Bs. 300,00 (corresponde a octubre). Es aparte: no se suma a los gastos.',
+      '🍽 Alimentación 1 gastos · 100% Bs. 1.000,00',
+    ]);
+    await page.click('#tab-list');
+    assert.match(await page.textContent('#list'), /Aparte · de octubre/);
+  });
+
+  await test('el histórico muestra el diezmo aparte y lo descuenta del ahorro', async (open) => {
+    const { page } = await open({ seed: { ...conDiezmo, 'app-mode': 'analisis', 'analisis-pcts': { gastos: 45, ahorro: 45, diezmo: 10 } } });
+    await page.click('#antab-hist');
+    const hist = (await page.innerText('#an-hist-content')).replace(/\s+/g, ' ');
+    assert.match(hist, /INGRESOS TOTALES Bs\. 6\.000,00 GASTOS TOTALES Bs\. 1\.000,00 DIEZMO TOTAL \(APARTE\) Bs\. 300,00/);
+    assert.match(hist, /TENGO EN LA CUENTA Bs\. 4\.700,00/);
+    // Ahorro: 6.000 − 1.000 − 300 = 4.700, frente a la meta del 45 % (2.700)
+    assert.match(hist, /DEBERÍA TENER \(45% DE AHORRO\) Bs\. 2\.700,00/);
+    assert.match(hist, /OBJETIVO CUMPLIDO \+Bs\. 2\.000,00 por encima/);
+    // El gráfico mensual sigue igual: el diezmo pagado en noviembre cuenta para octubre
+    await page.click('#antab-chart');
+    await page.click('.an-period-picker .period-row:nth-child(2) .period-nav button:first-child');
+    assert.match((await page.innerText('#an-chart-content')).replace(/\s+/g, ' '), /Octubre 2026 INGRESOS Bs\. 3\.000,00 GASTOS Bs\. 0,00 DIEZMO Bs\. 300,00/);
+  });
+
+  await test('en Mis Fijos, un diezmo fijo va en su propia fila', async (open) => {
+    const { page } = await open({ seed: { 'fijos-app-v1': [
+      fijo(7, 'ingresos', 'Sueldo', 'Sueldos', 30, '2026-11', [['2026-11', 2880.57]]),
+      fijo(8, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]]),
+      fijo(9, 'gastos', 'Diezmo', 'Diezmo', 5, '2026-11', [['2026-11', 288.06]]),
+    ] } });
+    await goMode(page, 'fijos');
+    const text = (await page.innerText('#fixed-content')).replace(/\s+/g, ' ');
+    assert.match(text, /Ingresos fijos \+Bs\. 2\.880,57 Gastos fijos −Bs\. 120,00 Diezmo \(aparte\) −Bs\. 288,06 Quedan Bs\. 2\.472,51/);
+    assert.strictEqual(await page.textContent('#topbar-sub'), 'Cada mes: +Bs. 2.880,57 · −Bs. 120,00');
+  });
+
   console.log('Préstamos');
 
   // Un préstamo de 500 a Juan (y un gasto normal de 100) en noviembre
