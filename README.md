@@ -32,6 +32,11 @@ Las fechas se guardan como `AAAA-MM-DDT12:00:00` (mediodía, hora local).
 Modos (panel ⚙, se recuerdan en `app-mode`): Mis Gastos, Mis Ingresos, Mis Préstamos,
 Mis Fijos y Mis Análisis.
 
+Para gastar: en Mis Gastos (arriba de «+ Agregar» y en Resumen) una tarjeta muestra cuánto
+queda para gastar en el mes: el porcentaje de gastos de `analisis-pcts` sobre los ingresos del
+mes (contando los ingresos fijos que aún no llegan), menos lo gastado (sin diezmo ni préstamos)
+y menos los gastos fijos que faltan ese mes. Solo informa; no manda avisos.
+
 Diezmo: se anota en Mis Gastos con `cat: "Diezmo"`, pero es una parte aparte del sueldo
 (no un gasto): no se suma a los gastos del mes (barra de arriba, Resumen, Histórico) y se
 muestra por separado. Es «mes vencido»: lo pagado en noviembre corresponde a octubre, y así

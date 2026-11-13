@@ -1,5 +1,6 @@
 // Pruebas de Mis Finanzas en un navegador real (Chromium), a tamaño de teléfono
 // y con la hora de Bolivia. Uso: node tests/run.js
+// Para correr solo algunas: ONLY="préstamo" node tests/run.js
 // Requiere Playwright instalado en el sistema.
 const { chromium } = require('playwright');
 const http = require('http');
@@ -68,7 +69,9 @@ async function main() {
     return { ctx, page, errors, external };
   }
 
+  const only = process.env.ONLY ? new RegExp(process.env.ONLY, 'i') : null;
   async function test(name, fn) {
+    if (only && !only.test(name)) return;
     const opened = [];
     const openTracked = async (opts) => { const o = await open(opts); opened.push(o); return o; };
     try {
@@ -186,6 +189,18 @@ async function main() {
     assert.deepStrictEqual(await listItems(page), [detail]);
     await page.click('#cat-chips .chip >> text=Otro');
     assert.deepStrictEqual(await listItems(page), [detail]);
+  });
+
+  await test('en un teléfono angosto el formulario no se sale de su tarjeta', async (open) => {
+    const { page } = await open();
+    await page.setViewportSize({ width: 360, height: 740 });
+    const box = await page.evaluate(() => ({
+      fecha: document.getElementById('inp-date').getBoundingClientRect().right,
+      tarjeta: document.getElementById('form-card').getBoundingClientRect().right,
+      pagina: document.documentElement.scrollWidth,
+    }));
+    assert.ok(box.fecha <= box.tarjeta, `el campo de fecha llega a ${box.fecha} y la tarjeta a ${box.tarjeta}`);
+    assert.ok(box.pagina <= 360, 'la página no debe desplazarse hacia los lados');
   });
 
   await test('al volver a Análisis solo queda marcada una pestaña', async (open) => {
@@ -1065,6 +1080,145 @@ async function main() {
     assert.match(text, /INGRESOS FIJOS 💼 Sueldo .* \+ Agregar ingreso fijo GASTOS FIJOS 🚌 Micro .* \+ Agregar gasto fijo/);
   });
 
+
+
+  console.log('Para gastar en el mes');
+
+  const p45 = { 'analisis-pcts': { gastos: 45, ahorro: 45, diezmo: 10 } };
+  const cardText = (page, id = '#add-budget') => page.$eval(id, (el) => el.innerText.replace(/\s+/g, ' ').trim());
+  // Noviembre: sueldo 2.880,57; gastos 620; además un préstamo, su devolución y el diezmo (no cuentan)
+  const mesNormal = {
+    ...p45,
+    'ingresos-app-v1': [mk(9, '2026-11-05', 2880.57, 'Sueldos', 'Sueldo'), { ...mk(10, '2026-11-09', 100, 'Devolución', 'Devolución: Juan'), loanId: 3 }],
+    'gastos-app-v1': [
+      mk(1, '2026-11-03', 500, 'Alimentación', 'Mercado'), mk(2, '2026-11-06', 120, 'Transporte', 'Taxi'),
+      mk(3, '2026-11-02', 300, 'Préstamo', 'Juan'), mk(4, '2026-11-04', 288, 'Diezmo', 'Diezmo'),
+    ],
+  };
+
+  await test('para gastar: el porcentaje de gastos sobre los ingresos del mes, menos lo gastado', async (open) => {
+    const { page } = await open({ seed: mesNormal });
+    // 45 % de 2.880,57 = 1.296,26; gastado 620 (sin préstamo ni diezmo); hoy es 11 → quedan 20 días
+    assert.strictEqual(await cardText(page),
+      'PARA GASTAR EN NOVIEMBRE 45 % de Bs. 2.880,57 Te quedan Bs. 676,26 Gastaste Bs. 620,00 de Bs. 1.296,26 Quedan 20 días: Bs. 33,81 por día.');
+    assert.strictEqual(await page.$eval('#add-budget .bg-bar div', (d) => d.style.width), '48%');
+  });
+
+  await test('para gastar: se actualiza al anotar o borrar un gasto', async (open) => {
+    const { page } = await open({ seed: mesNormal });
+    await page.fill('#inp-amount', '76.26');
+    await page.fill('#inp-detail', 'Cena');
+    await page.click('#btn-submit');
+    assert.match(await cardText(page), /Te quedan Bs\. 600,00 Gastaste Bs\. 696,26 de Bs\. 1\.296,26/);
+    await page.click('#tab-list');
+    await page.locator('#list .expense-item', { hasText: 'Mercado' }).locator('.btn-action.del').click();
+    await page.click('#del-modal .modal-btn.confirm');
+    await page.click('#tab-add');
+    assert.match(await cardText(page), /Te quedan Bs\. 1\.100,00 Gastaste Bs\. 196,26/);
+  });
+
+  await test('para gastar: cuenta el sueldo fijo por llegar y descuenta los gastos fijos que faltan', async (open) => {
+    const seed = { ...p45, 'fijos-app-v1': [
+      fijo(7, 'ingresos', 'Sueldo', 'Sueldos', 30, '2026-11', [['2026-11', 2880.57]]),
+      fijo(8, 'gastos', 'Micro', 'Transporte', 1, '2026-11', [['2026-11', 120]]),
+      fijo(9, 'gastos', 'Alquiler', 'Hogar', 20, '2026-11', [['2026-11', 500]]),
+      fijo(10, 'gastos', 'Diezmo', 'Diezmo', 25, '2026-11', [['2026-11', 288]]),
+    ] };
+    // Día 11: el micro ya se anotó (120); el alquiler (500) y el sueldo aún no
+    const a = await open({ seed });
+    assert.strictEqual(await cardText(a.page),
+      'PARA GASTAR EN NOVIEMBRE 45 % de Bs. 2.880,57 Te quedan Bs. 676,26 Gastaste Bs. 120,00 de Bs. 1.296,26 '
+      + 'Ya descuenta Bs. 500,00 de gastos fijos que faltan este mes. Cuenta Bs. 2.880,57 de ingresos fijos que aún no llegan. Quedan 20 días: Bs. 33,81 por día.');
+    assert.strictEqual(await a.page.$eval('#add-budget .bg-bar div', (d) => d.style.width), '48%');
+    // Día 21: el alquiler ya está anotado; lo que queda es lo mismo
+    const b = await open({ seed, now: '2026-11-21T10:00:00-04:00' });
+    assert.strictEqual(await cardText(b.page),
+      'PARA GASTAR EN NOVIEMBRE 45 % de Bs. 2.880,57 Te quedan Bs. 676,26 Gastaste Bs. 620,00 de Bs. 1.296,26 '
+      + 'Cuenta Bs. 2.880,57 de ingresos fijos que aún no llegan. Quedan 10 días: Bs. 67,63 por día.');
+    // Día 30: llegó el sueldo; ya nada está "por llegar"
+    const c = await open({ seed, now: '2026-11-30T10:00:00-04:00' });
+    assert.strictEqual(await cardText(c.page),
+      'PARA GASTAR EN NOVIEMBRE 45 % de Bs. 2.880,57 Te quedan Bs. 676,26 Gastaste Bs. 620,00 de Bs. 1.296,26 Hoy es el último día del mes.');
+  });
+
+  await test('para gastar: avisa cuando falta poco y cuando te pasaste', async (open) => {
+    const base = { ...p45, 'ingresos-app-v1': [mk(9, '2026-11-05', 1000, 'Sueldos', 'Sueldo')] };
+    const a = await open({ seed: { ...base, 'gastos-app-v1': [mk(1, '2026-11-03', 400, 'Otro', 'Varios')] } });
+    assert.strictEqual(await a.page.$eval('#add-budget .budget-card', (c) => c.className), 'budget-card warn');
+    assert.match(await cardText(a.page), /Te quedan Bs\. 50,00 Gastaste Bs\. 400,00 de Bs\. 450,00/);
+    const b = await open({ seed: { ...base, 'gastos-app-v1': [mk(1, '2026-11-03', 520.5, 'Otro', 'Varios')] } });
+    assert.strictEqual(await b.page.$eval('#add-budget .budget-card', (c) => c.className), 'budget-card over');
+    assert.strictEqual(await cardText(b.page), 'PARA GASTAR EN NOVIEMBRE 45 % de Bs. 1.000,00 Te pasaste por Bs. 70,50 Gastaste Bs. 520,50 de Bs. 450,00');
+    assert.strictEqual(await b.page.$eval('#add-budget .bg-bar div', (d) => d.style.width), '100%');
+  });
+
+  await test('para gastar: sin ingresos en el mes explica qué anotar; en Mis Ingresos no aparece', async (open) => {
+    const { page } = await open({ seed: { ...p45, 'gastos-app-v1': [mk(1, '2026-11-03', 50, 'Otro', 'Algo')] } });
+    assert.match(await cardText(page), /^PARA GASTAR EN NOVIEMBRE Para ver cuánto te queda, anota lo que ganas este mes/);
+    await goMode(page, 'ingresos');
+    assert.strictEqual(await page.$eval('#add-budget', (el) => el.innerHTML), '');
+    // Al anotar el sueldo y volver a Mis Gastos, ya calcula
+    await page.fill('#inp-amount', '1000');
+    await page.fill('#inp-detail', 'Sueldo');
+    await page.click('#btn-submit');
+    await goMode(page, 'gastos');
+    assert.match(await cardText(page), /Te quedan Bs\. 400,00 Gastaste Bs\. 50,00 de Bs\. 450,00/);
+  });
+
+  await test('para gastar: sin reparto guardado usa el 70 % inicial y lo dice; al guardarlo, lo usa', async (open) => {
+    const { page } = await open({ seed: { 'ingresos-app-v1': [mk(9, '2026-11-05', 1000, 'Sueldos', 'Sueldo')] } });
+    assert.match(await cardText(page), /70 % de Bs\. 1\.000,00 Te quedan Bs\. 700,00/);
+    assert.match(await cardText(page), /Usa 70 % para gastos \(el valor inicial\)\. Cámbialo en ⚙ → Mis Análisis → Config\./);
+    await goMode(page, 'analisis');
+    await page.fill('#in-gastos', '45');
+    await page.fill('#in-ahorro', '45');
+    await page.click('.pct-save-btn');
+    await goMode(page, 'gastos');
+    assert.match(await cardText(page), /45 % de Bs\. 1\.000,00 Te quedan Bs\. 450,00/);
+    assert.doesNotMatch(await cardText(page), /valor inicial/);
+  });
+
+  await test('para gastar: en Resumen sigue al mes elegido; los meses pasados dicen lo que sobró', async (open) => {
+    const { page } = await open({ seed: {
+      ...p45,
+      'ingresos-app-v1': [mk(8, '2026-10-05', 2000, 'Sueldos', 'Sueldo'), mk(9, '2026-11-05', 1000, 'Sueldos', 'Sueldo')],
+      'gastos-app-v1': [mk(1, '2026-10-10', 500, 'Otro', 'Octubre'), mk(2, '2026-11-03', 100, 'Otro', 'Noviembre')],
+    } });
+    await page.click('#tab-stats');
+    assert.match(await cardText(page, '#stats-budget'), /^PARA GASTAR EN NOVIEMBRE 45 % de Bs\. 1\.000,00 Te quedan Bs\. 350,00 Gastaste Bs\. 100,00 de Bs\. 450,00 Quedan 20 días/);
+    const prevMonth = '#view-stats .period-row:nth-child(2) .period-nav button:first-child';
+    const nextMonth = '#view-stats .period-row:nth-child(2) .period-nav button:last-child';
+    await page.click(prevMonth);
+    assert.strictEqual(await cardText(page, '#stats-budget'), 'PARA GASTAR EN OCTUBRE 45 % de Bs. 2.000,00 Te sobraron Bs. 400,00 Gastaste Bs. 500,00 de Bs. 900,00');
+    // Con una semana elegida no se muestra (es una cuenta del mes entero)
+    await page.locator('#stats-week-chips .week-chip').nth(1).click();
+    assert.strictEqual(await page.$eval('#stats-budget', (el) => el.innerHTML), '');
+    // Un mes sin ingresos ni gastos, y un mes futuro: nada
+    await page.click(prevMonth);
+    assert.strictEqual(await page.$eval('#stats-budget', (el) => el.innerHTML), '');
+    await page.click(nextMonth); await page.click(nextMonth); await page.click(nextMonth);
+    assert.strictEqual(await page.textContent('#stats-month-val'), 'Diciembre');
+    assert.strictEqual(await page.$eval('#stats-budget', (el) => el.innerHTML), '');
+  });
+
+  await test('si la app queda abierta de un día para otro, la fecha y la cuenta se ponen al día', async (open) => {
+    const { page } = await open({ now: '2026-11-10T23:50:00-04:00', seed: { ...p45, 'ingresos-app-v1': [mk(9, '2026-11-05', 1000, 'Sueldos', 'Sueldo')] } });
+    assert.strictEqual(await page.inputValue('#inp-date'), '2026-11-10');
+    assert.match(await cardText(page), /Quedan 21 días/);
+    // Pasa la medianoche y se vuelve a la app
+    await page.clock.setSystemTime(new Date('2026-11-11T00:10:00-04:00'));
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    assert.strictEqual(await page.inputValue('#inp-date'), '2026-11-11');
+    assert.match(await cardText(page), /Quedan 20 días/);
+  });
+
+  await test('al volver a la app no se cambia una fecha que elegiste a mano', async (open) => {
+    const { page } = await open({ now: '2026-11-10T23:50:00-04:00' });
+    await page.fill('#inp-date', '2026-11-03');
+    await page.clock.setSystemTime(new Date('2026-11-11T00:10:00-04:00'));
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    assert.strictEqual(await page.inputValue('#inp-date'), '2026-11-03');
+  });
 
   console.log('Diezmo');
 

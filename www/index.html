@@ -74,7 +74,8 @@
     .amount-wrap{position:relative}
     .amount-wrap .prefix{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:14px;font-family:var(--mono);pointer-events:none}
     .amount-wrap input{padding-left:44px!important;font-family:var(--mono);font-size:20px;font-weight:500;letter-spacing:-.5px}
-    .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+    .row2 .field input{min-width:0}
     .btn-row{display:flex;gap:8px;margin-top:14px}
     .btn-primary{flex:1;padding:13px;background:var(--accent);color:#0f0f0f;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);transition:all .15s}
     .btn-primary:active{transform:scale(.97);opacity:.9}
@@ -199,6 +200,21 @@
     .la-btn:active{background:var(--bg2)}
     .la-btn.danger{color:#f07070}
     .la-btn.danger.armed{border-color:var(--danger);background:var(--danger-dim)}
+
+    /* Para gastar en el mes */
+    .budget-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:13px 16px;margin-bottom:12px}
+    .bg-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px;font-size:11px;color:var(--text2);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px}
+    .bg-head .bg-base{text-transform:none;letter-spacing:0;font-family:var(--mono);color:var(--text3)}
+    .bg-main{font-size:14px;color:var(--text)}
+    .bg-main b{font-size:20px;font-weight:600;font-family:var(--mono);letter-spacing:-.7px;color:#6fcf8a;margin-left:4px}
+    .budget-card.warn .bg-main b{color:#f5a742}
+    .budget-card.over .bg-main b{color:#f07070}
+    .bg-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin:10px 0 8px}
+    .bg-bar div{height:100%;border-radius:3px;background:var(--accent)}
+    .budget-card.warn .bg-bar div{background:#f5a742}
+    .budget-card.over .bg-bar div{background:var(--danger)}
+    .bg-line{font-size:12px;color:var(--text2);line-height:1.5}
+    .bg-note{font-size:11px;color:var(--text3);line-height:1.5;margin-top:3px}
 
     /* Fijos */
     .rv-fixed{border-color:#3b2f63}
@@ -413,6 +429,7 @@
 
   <!-- TAB: AGREGAR -->
   <div class="scroll" id="view-add">
+    <div id="add-budget"></div>
     <div class="form-section" id="form-card">
       <div class="edit-banner" id="edit-banner">
         <span id="edit-banner-text">✏️ Editando gasto</span>
@@ -512,6 +529,7 @@
         <div class="week-chips" id="stats-week-chips"></div>
       </div>
     </div>
+    <div id="stats-budget"></div>
     <div class="summary">
       <div class="stat-card summary-wide">
         <div class="lbl" id="s-month-lbl">Este mes</div>
@@ -1630,6 +1648,7 @@ function updateAll(){
   const monthData=expenses.filter(e=>{const d=new Date(e.date);return !isLoanFlow(e)&&!isTithe(e)&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
   const total=monthData.reduce((s,e)=>s+e.amount,0);
   document.getElementById('topbar-sub').textContent=`${monthData.length} ${currentMode.nounPlural} en ${MONTHS[now.getMonth()]} · ${fmtMoney(total)}`;
+  renderAddBudget();
 }
 
 // ── PERIOD ────────────────────────────────────────────
@@ -1684,6 +1703,9 @@ function refreshCurrentTab(){
 // ── STATS ─────────────────────────────────────────────
 function renderStats(){
   updatePeriodUI();
+  const statsKey=selYear+'-'+String(selMonth+1).padStart(2,'0'), thisKey=monthKeyOf(new Date());
+  document.getElementById('stats-budget').innerHTML=currentModeKey==='gastos'&&selWeek===null&&statsKey<=thisKey
+    ?budgetCardHtml(monthBudget(statsKey),{current:statsKey===thisKey,hint:false}):'';
   const all=getFilteredExpenses();
   // Préstamos y devoluciones no son gastos ni ingresos: van aparte
   const filtered=all.filter(e=>!isLoanFlow(e));
@@ -2465,6 +2487,94 @@ function confirmFixedMatch(kind, id, fixedId, month) {
   localStorage.setItem(DATA_KEYS[kind], JSON.stringify(list));
   return f;
 }
+
+// ── PARA GASTAR ──────────────────────────────────────
+// Cuánto queda para gastar en el mes: el porcentaje para gastos (Mis Análisis → Config) de lo
+// que entra en el mes, menos lo ya gastado. El diezmo y los préstamos no cuentan como gasto.
+// Solo informa: no manda avisos.
+function round2(n) { return Math.round(n * 100) / 100; }
+function monthBudget(key) {
+  const [y, m] = key.split('-').map(Number);
+  const inMonth = e => { const d = new Date(e.date); return d.getFullYear() === y && d.getMonth() === m - 1; };
+  const sum = list => list.reduce((s, e) => s + e.amount, 0);
+  const gastos = readList(DATA_KEYS.gastos), ingresos = readList(DATA_KEYS.ingresos);
+  const income = sum(ingresos.filter(e => inMonth(e) && !isLoanFlow(e)));
+  const spent = sum(gastos.filter(e => inMonth(e) && !isLoanFlow(e) && !isTithe(e)));
+  // Fijos de este mes cuyo día aún no llegó: el sueldo por llegar ya cuenta como ingreso del mes
+  // y los gastos fijos que faltan ya se descuentan, para que lo que queda no cambie de golpe.
+  let incomeToCome = 0, fixedToCome = 0;
+  if (key === monthKeyOf(new Date())) {
+    for (const f of readFixed()) {
+      if (f.start > key || (f.upTo && f.upTo >= key)) continue; // no empezó, o este mes ya se procesó
+      const list = f.kind === 'ingresos' ? ingresos : gastos;
+      if (list.some(e => e.fixedId === f.id && e.fixedMonth === key)) continue; // ya está anotado
+      if (f.kind === 'ingresos') incomeToCome += amountFor(f, key);
+      else if (f.cat !== TITHE_CAT) fixedToCome += amountFor(f, key);
+    }
+  }
+  const pct = Number.isFinite(Number(pcts.gastos)) ? Number(pcts.gastos) : 70;
+  const base = round2(income + incomeToCome);
+  const allowance = round2(base * pct / 100);
+  return {
+    key, pct, base, allowance, incomeToCome: round2(incomeToCome),
+    spent: round2(spent), fixedToCome: round2(fixedToCome),
+    remaining: round2(allowance - spent - fixedToCome),
+  };
+}
+// current: es el mes en curso (se habla en presente y se muestra lo que queda por día);
+// hint: si no hay ingresos, explicar qué anotar en vez de no mostrar nada
+function budgetCardHtml(b, { current, hint }) {
+  const title = `<span>Para gastar en ${monthName(b.key)}</span>`;
+  if (b.base <= 0) {
+    return hint ? `<div class="budget-card">
+      <div class="bg-head">${title}</div>
+      <div class="bg-line">Para ver cuánto te queda, anota lo que ganas este mes: en Mis Ingresos, o tu sueldo como ingreso fijo en ⚙ → Mis Fijos.</div>
+    </div>` : '';
+  }
+  const used = b.spent + b.fixedToCome;
+  const ratio = b.allowance > 0 ? used / b.allowance : 1;
+  const over = b.remaining < 0;
+  const state = over ? 'over' : ratio >= 0.85 ? 'warn' : 'ok';
+  const main = over
+    ? `Te pasaste por <b>${fmtMoney(-b.remaining)}</b>`
+    : `${current ? 'Te quedan' : 'Te sobraron'} <b>${fmtMoney(b.remaining)}</b>`;
+  const notes = [];
+  if (b.fixedToCome > 0) notes.push(`Ya descuenta ${fmtMoney(b.fixedToCome)} de gastos fijos que faltan este mes.`);
+  if (b.incomeToCome > 0) notes.push(`Cuenta ${fmtMoney(b.incomeToCome)} de ingresos fijos que aún no llegan.`);
+  if (current && !over) {
+    const now = new Date();
+    const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
+    notes.push(daysLeft > 1 ? `Quedan ${daysLeft} días: ${fmtMoney(b.remaining / daysLeft)} por día.` : 'Hoy es el último día del mes.');
+  }
+  if (!readSavedPcts()) notes.push(`Usa ${b.pct} % para gastos (el valor inicial). Cámbialo en ⚙ → Mis Análisis → Config.`);
+  return `<div class="budget-card ${state}">
+    <div class="bg-head">${title}<span class="bg-base">${b.pct} % de ${fmtMoney(b.base)}</span></div>
+    <div class="bg-main">${main}</div>
+    <div class="bg-bar"><div style="width:${Math.min(100, Math.round(ratio * 100))}%"></div></div>
+    <div class="bg-line">Gastaste ${fmtMoney(b.spent)} de ${fmtMoney(b.allowance)}</div>
+    ${notes.length ? `<div class="bg-note">${notes.map(n => `<div>${n}</div>`).join('')}</div>` : ''}
+  </div>`;
+}
+// La tarjeta de arriba de «+ Agregar» (solo en Mis Gastos, siempre del mes en curso)
+function renderAddBudget() {
+  document.getElementById('add-budget').innerHTML = currentModeKey === 'gastos'
+    ? budgetCardHtml(monthBudget(monthKeyOf(new Date())), { current: true, hint: true }) : '';
+}
+
+// Al volver a la app, quizá al día siguiente: se anotan los fijos que ya tocan y la fecha por
+// defecto del formulario pasa a ser la de hoy (si no se había elegido otra a mano).
+let formToday = todayISO();
+function onAppShown() {
+  const today = todayISO();
+  if (today !== formToday) {
+    const inp = document.getElementById('inp-date');
+    if (editingId === null && inp.value === formToday) inp.value = today;
+    formToday = today;
+  }
+  if (runFixed()) refreshAfterDataChange();
+  else if (currentModeKey !== 'analisis') updateAll();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onAppShown(); });
 
 // ── APP ANDROID ──────────────────────────────────────
 // Dentro de la app Android hay un "puente" nativo; en la versión web no.
@@ -3250,7 +3360,7 @@ if (Native) {
   document.getElementById('capture-section').style.display = '';
   Native.PaymentCapture.addListener('captured', () => syncCaptured());
   Native.PaymentCapture.addListener('openReview', () => openReviewFromAlert());
-  Native.App.addListener('resume', () => { if (runFixed()) refreshAfterDataChange(); refreshCaptureStatus(); syncCaptured(); });
+  Native.App.addListener('resume', () => { onAppShown(); refreshCaptureStatus(); syncCaptured(); });
   // Al abrir: Android debe vigilar exactamente las apps elegidas aquí
   Native.PaymentCapture.setWatched({ packages: captureApps().map(a => a.pkg) }).catch(() => {})
     .then(() => { refreshCaptureStatus().then(maybeAskNotify); syncCaptured(); });
